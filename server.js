@@ -304,7 +304,7 @@ app.get("/add_game.html", requireDatabase, requireLogin, requirePlayerProfile, (
   res.sendFile(publicFile("add_game.html"));
 });
 
-app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
+app.post("/add_game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
   try {
     const { location, notes, result, deck_id } = req.body;
 
