@@ -1,10 +1,9 @@
 require("dotenv").config();
 
-
-const bcrypt = require("bcrypt");
 const express = require("express");
 const path = require("path");
 const { Pool } = require("pg");
+const bcrypt = require("bcrypt");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,12 +29,8 @@ app.get("/", (req, res) => {
 
 app.get("/test-db", async (req, res) => {
   try {
-    if (!databaseUrl) {
-      throw new Error("DATABASE_URL is not set");
-    }
-
     if (!pool) {
-      throw new Error("Database pool was not created");
+      throw new Error("DATABASE_URL is not set");
     }
 
     const result = await pool.query("SELECT NOW() AS now");
@@ -173,28 +168,6 @@ app.post("/api/matches", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-//login route
-app.post("/login", (req, res) => {
-  const { user, pass } = req.body;
-
-  if (user === "" && pass === "1234") {
-    res.redirect("/stats.html");
-  }
-  else if (user === "lou" && pass === "1234") {
-    res.redirect("/players.html");
-  }
-  else if (user === "admin" && pass === "1234") {
-    res.redirect("/leaderboard.html");
-  }
-  else {
-    res.send("Invalid login");
-  }
-});
-
 app.post("/register", async (req, res) => {
   try {
     if (!pool) {
@@ -204,7 +177,7 @@ app.post("/register", async (req, res) => {
     const { username, password, role } = req.body;
 
     if (!username || !password) {
-      return res.status(400).send("Username and password are required");
+      return res.status(400).send("Username and password are required.");
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -217,7 +190,7 @@ app.post("/register", async (req, res) => {
       [username, passwordHash, role || "player"]
     );
 
-    res.send("User registered successfully");
+    res.redirect("/sign.html");
   } catch (error) {
     console.error("Error registering user:", error);
     res.status(500).send(error.message || "Registration failed");
@@ -233,7 +206,7 @@ app.post("/login", async (req, res) => {
     const { user, pass } = req.body;
 
     if (!user || !pass) {
-      return res.status(400).send("Username and password are required");
+      return res.status(400).send("Username and password are required.");
     }
 
     const result = await pool.query(
@@ -246,15 +219,14 @@ app.post("/login", async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).send("Invalid username or password");
+      return res.status(401).send("Invalid username or password.");
     }
 
     const dbUser = result.rows[0];
-
     const passwordMatches = await bcrypt.compare(pass, dbUser.password_hash);
 
     if (!passwordMatches) {
-      return res.status(401).send("Invalid username or password");
+      return res.status(401).send("Invalid username or password.");
     }
 
     if (dbUser.role === "admin") {
@@ -268,4 +240,6 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.use(express.urlencoded({ extended: true }));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
