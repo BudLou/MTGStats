@@ -9,15 +9,16 @@ const session = require("express-session");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const databaseUrl = process.env.DATABASE_URL;
+const DATABASE_URL = process.env.DATABASE_URL;
+const SESSION_SECRET = process.env.SESSION_SECRET || "change-this-in-production";
 
-if (!databaseUrl) {
+if (!DATABASE_URL) {
   console.warn("Warning: DATABASE_URL is not set.");
 }
 
-const pool = databaseUrl
+const pool = DATABASE_URL
   ? new Pool({
-      connectionString: databaseUrl,
+      connectionString: DATABASE_URL,
       ssl: { rejectUnauthorized: false }
     })
   : null;
@@ -30,7 +31,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "mtg-stats-secret-key",
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -68,6 +69,22 @@ async function getPlayerByUserId(userId) {
   return result.rows[0] || null;
 }
 
+async function requirePlayerProfile(req, res, next) {
+  try {
+    const linkedPlayer = await getPlayerByUserId(req.session.user.id);
+
+    if (!linkedPlayer) {
+      return res.redirect("/profile-setup.html");
+    }
+
+    req.player = linkedPlayer;
+    next();
+  } catch (error) {
+    console.error("Error checking player profile:", error);
+    res.status(500).send("Failed to verify player profile.");
+  }
+}
+
 app.get("/", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
@@ -75,36 +92,12 @@ app.get("/", (req, res) => {
 app.get("/test-db", requireDatabase, async (req, res) => {
   try {
     const result = await pool.query("SELECT NOW() AS now");
-
     res.json({
       success: true,
       now: result.rows[0].now
     });
   } catch (error) {
     console.error("DB test failed:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message || String(error)
-    });
-  }
-});
-
-app.get("/api/players", requireDatabase, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `
-      SELECT id, name, created_at, user_id
-      FROM players
-      ORDER BY name ASC
-      `
-    );
-
-    res.json({
-      success: true,
-      players: result.rows
-    });
-  } catch (error) {
-    console.error("Error fetching players:", error);
     res.status(500).json({
       success: false,
       error: error.message || String(error)
@@ -124,6 +117,10 @@ app.post("/register", requireDatabase, async (req, res) => {
 
     if (!cleanUsername) {
       return res.status(400).send("Username cannot be empty.");
+    }
+
+    if (password.length < 6) {
+      return res.status(400).send("Password must be at least 6 characters.");
     }
 
     const existingUser = await pool.query(
@@ -152,7 +149,7 @@ app.post("/register", requireDatabase, async (req, res) => {
     res.redirect("/sign.html");
   } catch (error) {
     console.error("Error registering user:", error);
-    res.status(500).send(error.message || "Registration failed");
+    res.status(500).send("Registration failed.");
   }
 });
 
@@ -199,7 +196,7 @@ app.post("/login", requireDatabase, async (req, res) => {
     return res.redirect("/add-game.html");
   } catch (error) {
     console.error("Error logging in:", error);
-    res.status(500).send(error.message || "Login failed");
+    res.status(500).send("Login failed.");
   }
 });
 
@@ -211,7 +208,6 @@ app.get("/profile-setup.html", requireDatabase, requireLogin, async (req, res) =
       return res.redirect("/add-game.html");
     }
 
-    // This serves your current uploaded file name: profile_setup.html
     res.sendFile(path.join(PUBLIC_DIR, "profile_setup.html"));
   } catch (error) {
     console.error("Error loading profile setup page:", error);
@@ -234,13 +230,15 @@ app.post("/profile-setup", requireDatabase, requireLogin, async (req, res) => {
       return res.redirect("/add-game.html");
     }
 
+    const cleanPlayerName = player_name.trim();
+
     const existingName = await pool.query(
       `
       SELECT id
       FROM players
       WHERE name = $1
       `,
-      [player_name.trim()]
+      [cleanPlayerName]
     );
 
     if (existingName.rows.length > 0) {
@@ -252,13 +250,91 @@ app.post("/profile-setup", requireDatabase, requireLogin, async (req, res) => {
       INSERT INTO players (name, user_id)
       VALUES ($1, $2)
       `,
-      [player_name.trim(), userId]
+      [cleanPlayerName, userId]
     );
 
     return res.redirect("/add-game.html");
   } catch (error) {
     console.error("Error creating player profile:", error);
-    res.status(500).send(error.message || "Profile setup failed");
+    res.status(500).send("Profile setup failed.");
+  }
+});
+
+app.get("/add-game.html", requireDatabase, requireLogin, requirePlayerProfile, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "add-game.html"));
+});
+
+app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
+  try {
+    const { location, notes, result, deck_id } = req.body;
+
+    if (!result || !["win", "loss", "draw"].includes(result)) {
+      return res.status(400).send("A valid result is required.");
+    }
+
+    const matchInsert = await pool.query(
+      `
+      INSERT INTO matches (location, notes, created_by_user_id)
+      VALUES ($1, $2, $3)
+      RETURNING id
+      `,
+      [location || null, notes || null, req.session.user.id]
+    );
+
+    const matchId = matchInsert.rows[0].id;
+
+    let safeDeckId = null;
+
+    if (deck_id) {
+      const deckCheck = await pool.query(
+        `
+        SELECT id
+        FROM decks
+        WHERE id = $1
+        `,
+        [deck_id]
+      );
+
+      if (deckCheck.rows.length > 0) {
+        safeDeckId = deck_id;
+      }
+    }
+
+    await pool.query(
+      `
+      INSERT INTO match_players (match_id, player_id, deck_id, result)
+      VALUES ($1, $2, $3, $4)
+      `,
+      [matchId, req.player.id, safeDeckId, result]
+    );
+
+    res.redirect("/add-game.html");
+  } catch (error) {
+    console.error("Error adding game:", error);
+    res.status(500).send("Failed to add game.");
+  }
+});
+
+app.get("/api/players", requireDatabase, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, name, created_at, user_id
+      FROM players
+      ORDER BY name ASC
+      `
+    );
+
+    res.json({
+      success: true,
+      players: result.rows
+    });
+  } catch (error) {
+    console.error("Error fetching players:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || String(error)
+    });
   }
 });
 
@@ -310,6 +386,10 @@ app.post("/logout", (req, res) => {
 
     res.redirect("/sign.html");
   });
+});
+
+app.use((req, res) => {
+  res.status(404).send("Page not found.");
 });
 
 app.listen(PORT, () => {
