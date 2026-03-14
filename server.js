@@ -33,6 +33,21 @@ app.use(
   })
 );
 
+function requireLogin(req, res, next) {
+  if (!req.session.user) {
+    return res.redirect("/sign.html");
+  }
+  next();
+}
+
+app.get("profile-setup.html", requireLogin, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "profile-setup.html"));
+});
+
+app.post("/profile-setup", requireLogin, async (req, res) => {
+  // save linked player data
+});
+
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -99,7 +114,7 @@ app.post("/register", async (req, res) => {
       [username, passwordHash, role || "player"]
     );
 
-    res.redirect("/sign.html");
+    res.redirect("sign.html");
   } catch (error) {
     console.error("Error registering user:", error);
     res.status(500).send(error.message || "Registration failed");
@@ -154,14 +169,14 @@ app.post("/login", async (req, res) => {
     );
 
     if (playerResult.rows.length === 0) {
-      return res.redirect("/profile-setup.html");
+      return res.redirect("profile-setup.html");
     }
 
     if (dbUser.role === "admin") {
-      return res.redirect("/leaderboard.html");
+      return res.redirect("leaderboard.html");
     }
 
-    return res.redirect("/players.html");
+    return res.redirect("players.html");
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).send(error.message || "Login failed");
@@ -238,7 +253,7 @@ app.post("/profile-setup", async (req, res) => {
     );
 
     if (existingPlayer.rows.length > 0) {
-      return res.redirect("/players.html");
+      return res.redirect("players.html");
     }
 
     await pool.query(
@@ -249,7 +264,7 @@ app.post("/profile-setup", async (req, res) => {
       [player_name, userId]
     );
 
-    res.redirect("/players.html");
+    res.redirect("players.html");
   } catch (error) {
     console.error("Error creating player profile:", error);
     res.status(500).send(error.message || "Profile setup failed");
@@ -265,3 +280,4 @@ app.post("/logout", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
