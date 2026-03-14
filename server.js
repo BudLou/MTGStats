@@ -304,12 +304,46 @@ app.get("/add_game.html", requireDatabase, requireLogin, requirePlayerProfile, (
   res.sendFile(publicFile("add_game.html"));
 });
 
-app.post("/add_game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
+app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
   try {
-    const { location, notes, result, deck_id } = req.body;
+    const { location, notes, result, deck_name, format, commander } = req.body;
 
     if (!result || !["win", "loss", "draw"].includes(result)) {
       return res.status(400).send("A valid result is required.");
+    }
+
+    let deckId = null;
+
+    if (deck_name && deck_name.trim()) {
+      const existingDeck = await pool.query(
+        `
+        SELECT id
+        FROM decks
+        WHERE player_id = $1
+          AND deck_name = $2
+        `,
+        [req.player.id, deck_name.trim()]
+      );
+
+      if (existingDeck.rows.length > 0) {
+        deckId = existingDeck.rows[0].id;
+      } else {
+        const newDeck = await pool.query(
+          `
+          INSERT INTO decks (player_id, deck_name, format, commander)
+          VALUES ($1, $2, $3, $4)
+          RETURNING id
+          `,
+          [
+            req.player.id,
+            deck_name.trim(),
+            format && format.trim() ? format.trim() : "Commander",
+            commander && commander.trim() ? commander.trim() : null
+          ]
+        );
+
+        deckId = newDeck.rows[0].id;
+      }
     }
 
     const matchInsert = await pool.query(
@@ -318,34 +352,21 @@ app.post("/add_game", requireDatabase, requireLogin, requirePlayerProfile, async
       VALUES ($1, $2, $3)
       RETURNING id
       `,
-      [location || null, notes || null, req.session.user.id]
+      [
+        location && location.trim() ? location.trim() : null,
+        notes && notes.trim() ? notes.trim() : null,
+        req.session.user.id
+      ]
     );
 
     const matchId = matchInsert.rows[0].id;
-
-    let safeDeckId = null;
-
-    if (deck_id) {
-      const deckCheck = await pool.query(
-        `
-        SELECT id
-        FROM decks
-        WHERE id = $1
-        `,
-        [deck_id]
-      );
-
-      if (deckCheck.rows.length > 0) {
-        safeDeckId = deck_id;
-      }
-    }
 
     await pool.query(
       `
       INSERT INTO match_players (match_id, player_id, deck_id, result)
       VALUES ($1, $2, $3, $4)
       `,
-      [matchId, req.player.id, safeDeckId, result]
+      [matchId, req.player.id, deckId, result]
     );
 
     res.redirect("/add_game.html");
