@@ -246,15 +246,22 @@ app.post("/register", requireDatabase, async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    await pool.query(
+    const newUser = await pool.query(
       `
       INSERT INTO users (username, password_hash, role)
       VALUES ($1, $2, 'player')
+      RETURNING id, username, role
       `,
       [cleanUsername, passwordHash]
     );
 
-    res.redirect("/sign.html");
+    req.session.user = {
+      id: newUser.rows[0].id,
+      username: newUser.rows[0].username,
+      role: newUser.rows[0].role
+    };
+
+    return res.redirect("/profile-setup.html");
   } catch (error) {
     console.error("Error registering user:", error);
     res.status(500).send(error.message || "Registration failed.");

@@ -3,12 +3,58 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MTG Stats</title>
+  <title>Add Game - MTG Stats</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main>
-    <p>It works</p>
+    <h1>Add a Game</h1>
+    <p>Log a match result for your linked player profile.</p>
+
+    <form action="/add-game" method="POST">
+      <p>
+        <label for="deck_name">Deck Name:</label>
+        <input type="text" name="deck_name" id="deck_name" required>
+      </p>
+
+      <p>
+        <label for="format">Format:</label>
+        <input type="text" name="format" id="format" value="Commander">
+      </p>
+
+      <p>
+        <label for="commander">Commander:</label>
+        <input type="text" name="commander" id="commander">
+      </p>
+
+      <p>
+        <label for="result">Result:</label>
+        <select name="result" id="result" required>
+          <option value="">Select a result</option>
+          <option value="win">Win</option>
+          <option value="loss">Loss</option>
+          <option value="draw">Draw</option>
+        </select>
+      </p>
+
+      <p>
+        <label for="location">Location:</label>
+        <input type="text" name="location" id="location">
+      </p>
+
+      <p>
+        <label for="notes">Notes:</label>
+        <textarea name="notes" id="notes" rows="4"></textarea>
+      </p>
+
+      <input type="submit" value="Save Game">
+    </form>
+
+    <p>
+      <a href="/logout" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">Log out</a>
+    </p>
+
+    <form id="logout-form" action="/logout" method="POST" style="display:none;"></form>
   </main>
 </body>
 </html>
