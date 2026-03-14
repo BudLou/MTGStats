@@ -8,13 +8,33 @@
 </head>
 <body>
   <main>
-    <h1>Create Your Player Profile</h1>
-    <p>Enter the player name you want linked to this account.</p>
+    <h1>Complete Your Profile</h1>
+    <p>Please add your required player name and any optional contact info.</p>
 
-    <form action="/profile-setup" method="post">
+    <form action="/profile-setup" method="POST">
       <p>
-        <label for="player_name">Player Name:</label>
-        <input type="text" name="player_name" id="player_name" required>
+        <label for="player_name">Player Name (required):</label>
+        <input type="text" id="player_name" name="player_name" required>
+      </p>
+
+      <p>
+        <label for="deckbuilding_link">Deckbuilding Site Link (optional):</label>
+        <input
+          type="url"
+          id="deckbuilding_link"
+          name="deckbuilding_link"
+          placeholder="https://moxfield.com/..."
+        >
+      </p>
+
+      <p>
+        <label for="discord_contact">Discord Contact (optional):</label>
+        <input
+          type="text"
+          id="discord_contact"
+          name="discord_contact"
+          placeholder="username or username#1234"
+        >
       </p>
 
       <input type="submit" value="Save Profile">

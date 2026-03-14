@@ -2,7 +2,6 @@ require("dotenv").config();
 
 const express = require("express");
 const path = require("path");
-const fs = require("fs");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 const session = require("express-session");
@@ -25,7 +24,6 @@ const pool = DATABASE_URL
   : null;
 
 const PUBLIC_DIR = path.join(__dirname, "public");
-const SCHEMA_PATH = path.join(__dirname, "schema.sql");
 
 app.use(express.static(PUBLIC_DIR));
 app.use(express.json());
@@ -65,7 +63,7 @@ function publicFile(name) {
 async function getPlayerByUserId(userId) {
   const result = await pool.query(
     `
-    SELECT id, name, user_id
+    SELECT id, name, user_id, deckbuilding_link, discord_contact
     FROM players
     WHERE user_id = $1
     `,
@@ -75,11 +73,15 @@ async function getPlayerByUserId(userId) {
   return result.rows[0] || null;
 }
 
+function isProfileComplete(player) {
+  return !!(player && player.name && player.name.trim());
+}
+
 async function requirePlayerProfile(req, res, next) {
   try {
     const linkedPlayer = await getPlayerByUserId(req.session.user.id);
 
-    if (!linkedPlayer) {
+    if (!isProfileComplete(linkedPlayer)) {
       return res.redirect("/profile-setup.html");
     }
 
@@ -124,8 +126,18 @@ app.get("/init-schema", requireDatabase, async (req, res) => {
     `);
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS players (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`
       ALTER TABLE players
-      ADD COLUMN IF NOT EXISTS user_id INTEGER UNIQUE;
+      ADD COLUMN IF NOT EXISTS user_id INTEGER UNIQUE,
+      ADD COLUMN IF NOT EXISTS deckbuilding_link TEXT,
+      ADD COLUMN IF NOT EXISTS discord_contact TEXT;
     `);
 
     await pool.query(`
@@ -176,12 +188,29 @@ app.get("/init-schema", requireDatabase, async (req, res) => {
       );
     `);
 
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_players_user_id ON players(user_id);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_decks_player_id ON decks(player_id);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_matches_created_by_user_id ON matches(created_by_user_id);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_match_players_match_id ON match_players(match_id);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_match_players_player_id ON match_players(player_id);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_match_players_deck_id ON match_players(deck_id);`);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_players_user_id ON players(user_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_decks_player_id ON decks(player_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_matches_created_by_user_id ON matches(created_by_user_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_match_players_match_id ON match_players(match_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_match_players_player_id ON match_players(player_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_match_players_deck_id ON match_players(deck_id);
+    `);
 
     res.send("Schema initialized successfully.");
   } catch (error) {
@@ -304,7 +333,7 @@ app.post("/login", requireDatabase, async (req, res) => {
 
     const linkedPlayer = await getPlayerByUserId(dbUser.id);
 
-    if (!linkedPlayer) {
+    if (!isProfileComplete(linkedPlayer)) {
       return res.redirect("/profile-setup.html");
     }
 
@@ -319,7 +348,7 @@ app.get("/profile-setup.html", requireDatabase, requireLogin, async (req, res) =
   try {
     const linkedPlayer = await getPlayerByUserId(req.session.user.id);
 
-    if (linkedPlayer) {
+    if (isProfileComplete(linkedPlayer)) {
       return res.redirect("/add_game.html");
     }
 
@@ -333,44 +362,62 @@ app.get("/profile-setup.html", requireDatabase, requireLogin, async (req, res) =
 app.post("/profile-setup", requireDatabase, requireLogin, async (req, res) => {
   try {
     const userId = req.session.user.id;
-    const { player_name } = req.body;
+    const { player_name, deckbuilding_link, discord_contact } = req.body;
 
     if (!player_name || !player_name.trim()) {
       return res.status(400).send("Player name is required.");
     }
 
+    const cleanPlayerName = player_name.trim();
+    const cleanDeckLink =
+      deckbuilding_link && deckbuilding_link.trim()
+        ? deckbuilding_link.trim()
+        : null;
+    const cleanDiscord =
+      discord_contact && discord_contact.trim()
+        ? discord_contact.trim()
+        : null;
+
     const existingLinkedPlayer = await getPlayerByUserId(userId);
 
-    if (existingLinkedPlayer) {
-      return res.redirect("/add_game.html");
-    }
-
-    const cleanPlayerName = player_name.trim();
-
-    const existingName = await pool.query(
+    const duplicateName = await pool.query(
       `
       SELECT id
       FROM players
       WHERE name = $1
-      `,
-      [cleanPlayerName]
-    );
-
-    if (existingName.rows.length > 0) {
-      return res.status(409).send("That player name is already in use.");
-    }
-
-    await pool.query(
-      `
-      INSERT INTO players (name, user_id)
-      VALUES ($1, $2)
+        AND (user_id IS NULL OR user_id <> $2)
       `,
       [cleanPlayerName, userId]
     );
 
+    if (duplicateName.rows.length > 0) {
+      return res.status(409).send("That player name is already in use.");
+    }
+
+    if (existingLinkedPlayer) {
+      await pool.query(
+        `
+        UPDATE players
+        SET name = $1,
+            deckbuilding_link = $2,
+            discord_contact = $3
+        WHERE user_id = $4
+        `,
+        [cleanPlayerName, cleanDeckLink, cleanDiscord, userId]
+      );
+    } else {
+      await pool.query(
+        `
+        INSERT INTO players (name, user_id, deckbuilding_link, discord_contact)
+        VALUES ($1, $2, $3, $4)
+        `,
+        [cleanPlayerName, userId, cleanDeckLink, cleanDiscord]
+      );
+    }
+
     return res.redirect("/add_game.html");
   } catch (error) {
-    console.error("Error creating player profile:", error);
+    console.error("Error creating/updating player profile:", error);
     res.status(500).send(error.message || "Profile setup failed.");
   }
 });
@@ -455,7 +502,7 @@ app.get("/api/players", requireDatabase, async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, name, created_at, user_id
+      SELECT id, name, user_id, deckbuilding_link, discord_contact, created_at
       FROM players
       ORDER BY name ASC
       `
@@ -492,7 +539,9 @@ app.get("/api/me", requireDatabase, async (req, res) => {
         u.username,
         u.role,
         p.id AS player_id,
-        p.name AS player_name
+        p.name AS player_name,
+        p.deckbuilding_link,
+        p.discord_contact
       FROM users u
       LEFT JOIN players p ON p.user_id = u.id
       WHERE u.id = $1

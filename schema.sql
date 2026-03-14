@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS match_players (
   UNIQUE (match_id, player_id)
 );
 
+ALTER TABLE players
+ADD COLUMN IF NOT EXISTS deckbuilding_link TEXT,
+ADD COLUMN IF NOT EXISTS discord_contact TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_players_user_id ON players(user_id);
 CREATE INDEX IF NOT EXISTS idx_decks_player_id ON decks(player_id);
 CREATE INDEX IF NOT EXISTS idx_matches_created_by_user_id ON matches(created_by_user_id);
