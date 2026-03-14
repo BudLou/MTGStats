@@ -24,9 +24,8 @@ const pool = DATABASE_URL
     })
   : null;
 
-const ROOT_DIR = __dirname;
-const PUBLIC_DIR = path.join(ROOT_DIR, "public");
-const SCHEMA_PATH = path.join(ROOT_DIR, "schema.sql");
+const PUBLIC_DIR = path.join(__dirname, "public");
+const SCHEMA_PATH = path.join(__dirname, "schema.sql");
 
 app.use(express.static(PUBLIC_DIR));
 app.use(express.json());
@@ -92,16 +91,6 @@ async function requirePlayerProfile(req, res, next) {
   }
 }
 
-async function ensureSchema() {
-  if (!pool) {
-    throw new Error("DATABASE_URL is not set.");
-  }
-
-  const schemaSql = fs.readFileSync(SCHEMA_PATH, "utf8");
-  await pool.query(schemaSql);
-  console.log("Schema ensured.");
-}
-
 app.get("/", (req, res) => {
   res.sendFile(publicFile("index.html"));
 });
@@ -119,6 +108,17 @@ app.get("/test-db", requireDatabase, async (req, res) => {
       success: false,
       error: error.message || String(error)
     });
+  }
+});
+
+app.get("/init-schema", requireDatabase, async (req, res) => {
+  try {
+    const schemaSql = fs.readFileSync(SCHEMA_PATH, "utf8");
+    await pool.query(schemaSql);
+    res.send("Schema initialized successfully.");
+  } catch (error) {
+    console.error("Schema init failed:", error);
+    res.status(500).send(error.message || "Schema init failed.");
   }
 });
 
@@ -432,13 +432,6 @@ app.use((req, res) => {
   res.status(404).send("Page not found.");
 });
 
-ensureSchema()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  })
-  .catch((error) => {
-    console.error("Server startup failed:", error);
-    process.exit(1);
-  });
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
