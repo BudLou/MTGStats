@@ -193,7 +193,7 @@ app.post("/login", requireDatabase, async (req, res) => {
       return res.redirect("/profile-setup.html");
     }
 
-    return res.redirect("/add-game.html");
+    return res.redirect("/add_game.html");
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).send("Login failed.");
@@ -205,7 +205,7 @@ app.get("/profile-setup.html", requireDatabase, requireLogin, async (req, res) =
     const linkedPlayer = await getPlayerByUserId(req.session.user.id);
 
     if (linkedPlayer) {
-      return res.redirect("/add-game.html");
+      return res.redirect("/add_game.html");
     }
 
     res.sendFile(path.join(PUBLIC_DIR, "profile_setup.html"));
@@ -227,7 +227,7 @@ app.post("/profile-setup", requireDatabase, requireLogin, async (req, res) => {
     const existingLinkedPlayer = await getPlayerByUserId(userId);
 
     if (existingLinkedPlayer) {
-      return res.redirect("/add-game.html");
+      return res.redirect("/add_game.html");
     }
 
     const cleanPlayerName = player_name.trim();
@@ -253,18 +253,18 @@ app.post("/profile-setup", requireDatabase, requireLogin, async (req, res) => {
       [cleanPlayerName, userId]
     );
 
-    return res.redirect("/add-game.html");
+    return res.redirect("/add_game.html");
   } catch (error) {
     console.error("Error creating player profile:", error);
     res.status(500).send("Profile setup failed.");
   }
 });
 
-app.get("/add-game.html", requireDatabase, requireLogin, requirePlayerProfile, (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "add-game.html"));
+app.get("/add_game.html", requireDatabase, requireLogin, requirePlayerProfile, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "add_game.html"));
 });
 
-app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
+app.post("/add_game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
   try {
     const { location, notes, result, deck_id } = req.body;
 
@@ -308,7 +308,7 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
       [matchId, req.player.id, safeDeckId, result]
     );
 
-    res.redirect("/add-game.html");
+    res.redirect("/add_game.html");
   } catch (error) {
     console.error("Error adding game:", error);
     res.status(500).send("Failed to add game.");
