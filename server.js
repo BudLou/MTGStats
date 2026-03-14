@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 const session = require("express-session");
@@ -24,6 +25,7 @@ const pool = DATABASE_URL
   : null;
 
 const PUBLIC_DIR = path.join(__dirname, "public");
+const SCHEMA_PATH = path.join(__dirname, "schema.sql");
 
 app.use(express.static(PUBLIC_DIR));
 app.use(express.json());
@@ -56,6 +58,10 @@ function requireLogin(req, res, next) {
   next();
 }
 
+function publicFile(name) {
+  return path.join(PUBLIC_DIR, name);
+}
+
 async function getPlayerByUserId(userId) {
   const result = await pool.query(
     `
@@ -81,12 +87,27 @@ async function requirePlayerProfile(req, res, next) {
     next();
   } catch (error) {
     console.error("Error checking player profile:", error);
-    res.status(500).send("Failed to verify player profile.");
+    res.status(500).send(error.message || "Failed to verify player profile.");
+  }
+}
+
+async function ensureSchema() {
+  if (!pool) return;
+
+  const client = await pool.connect();
+  try {
+    const schemaSql = fs.readFileSync(SCHEMA_PATH, "utf8");
+    await client.query(schemaSql);
+    console.log("Schema ensured.");
+  } catch (error) {
+    console.error("Schema initialization failed:", error);
+  } finally {
+    client.release();
   }
 }
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+  res.sendFile(publicFile("index.html"));
 });
 
 app.get("/test-db", requireDatabase, async (req, res) => {
@@ -98,6 +119,29 @@ app.get("/test-db", requireDatabase, async (req, res) => {
     });
   } catch (error) {
     console.error("DB test failed:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || String(error)
+    });
+  }
+});
+
+app.get("/health/schema", requireDatabase, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name IN ('users', 'players', 'decks', 'matches', 'match_players')
+      ORDER BY table_name
+    `);
+
+    res.json({
+      success: true,
+      tables: result.rows.map((row) => row.table_name)
+    });
+  } catch (error) {
+    console.error("Schema health check failed:", error);
     res.status(500).json({
       success: false,
       error: error.message || String(error)
@@ -149,7 +193,7 @@ app.post("/register", requireDatabase, async (req, res) => {
     res.redirect("/sign.html");
   } catch (error) {
     console.error("Error registering user:", error);
-    res.status(500).send("Registration failed.");
+    res.status(500).send(error.message || "Registration failed.");
   }
 });
 
@@ -196,7 +240,7 @@ app.post("/login", requireDatabase, async (req, res) => {
     return res.redirect("/add_game.html");
   } catch (error) {
     console.error("Error logging in:", error);
-    res.status(500).send("Login failed.");
+    res.status(500).send(error.message || "Login failed.");
   }
 });
 
@@ -208,10 +252,10 @@ app.get("/profile-setup.html", requireDatabase, requireLogin, async (req, res) =
       return res.redirect("/add_game.html");
     }
 
-    res.sendFile(path.join(PUBLIC_DIR, "profile_setup.html"));
+    res.sendFile(publicFile("profile_setup.html"));
   } catch (error) {
     console.error("Error loading profile setup page:", error);
-    res.status(500).send("Failed to load profile setup page.");
+    res.status(500).send(error.message || "Failed to load profile setup page.");
   }
 });
 
@@ -256,15 +300,15 @@ app.post("/profile-setup", requireDatabase, requireLogin, async (req, res) => {
     return res.redirect("/add_game.html");
   } catch (error) {
     console.error("Error creating player profile:", error);
-    res.status(500).send("Profile setup failed.");
+    res.status(500).send(error.message || "Profile setup failed.");
   }
 });
 
 app.get("/add_game.html", requireDatabase, requireLogin, requirePlayerProfile, (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "add_game.html"));
+  res.sendFile(publicFile("add_game.html"));
 });
 
-app.post("/add_game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
+app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
   try {
     const { location, notes, result, deck_id } = req.body;
 
@@ -311,7 +355,7 @@ app.post("/add_game", requireDatabase, requireLogin, requirePlayerProfile, async
     res.redirect("/add_game.html");
   } catch (error) {
     console.error("Error adding game:", error);
-    res.status(500).send("Failed to add game.");
+    res.status(500).send(error.message || "Failed to add game.");
   }
 });
 
@@ -381,7 +425,7 @@ app.post("/logout", (req, res) => {
   req.session.destroy((error) => {
     if (error) {
       console.error("Error destroying session:", error);
-      return res.status(500).send("Logout failed.");
+      return res.status(500).send(error.message || "Logout failed.");
     }
 
     res.redirect("/sign.html");
@@ -392,6 +436,8 @@ app.use((req, res) => {
   res.status(404).send("Page not found.");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+ensureSchema().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 });
