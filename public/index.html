@@ -1,35 +1,24 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MTG Stats</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
+  <main>
+    <h1>MTG Stats</h1>
+    <p>Select a page to view different parts of the site.</p>
 
-<h1>MTG Players</h1>
-
-<ul id="player-list"></ul>
-
-<script>
-async function loadPlayers() {
-
-  const response = await fetch('/api/players');
-  const players = await response.json();
-
-  const list = document.getElementById('player-list');
-
-  list.innerHTML = '';
-
-  players.forEach(player => {
-    const li = document.createElement('li');
-    li.textContent = player.name;
-    list.appendChild(li);
-  });
-
-}
-
-loadPlayers();
-</script>
-
+    <nav class="nav-grid">
+      <a class="nav-card" href="/players.html">Players</a>
+      <a class="nav-card" href="/decks.html">Decks</a>
+      <a class="nav-card" href="/matches.html">Matches</a>
+      <a class="nav-card" href="/leaderboard.html">Leaderboard</a>
+      <a class="nav-card" href="/stats.html">Stats</a>
+      <a class="nav-card" href="/form.html"><strong><bold>Add a Game here!</bold></strong>
+    </nav>
+  </main>
 </body>
 </html>
