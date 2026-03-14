@@ -4,6 +4,7 @@ const express = require("express");
 const path = require("path");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
+const session = require("express-session");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +24,15 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use(
+  session({
+    secret: "mtg-stats-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false }
+  })
+);
+
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -34,7 +44,6 @@ app.get("/test-db", async (req, res) => {
     }
 
     const result = await pool.query("SELECT NOW() AS now");
-
     res.json({
       success: true,
       now: result.rows[0].now
@@ -55,7 +64,7 @@ app.get("/api/players", async (req, res) => {
     }
 
     const result = await pool.query(
-      "SELECT id, name, created_at FROM players ORDER BY name ASC"
+      "SELECT id, name, created_at, user_id FROM players ORDER BY name ASC"
     );
 
     res.json(result.rows);
@@ -65,106 +74,6 @@ app.get("/api/players", async (req, res) => {
       success: false,
       error: error.message || String(error)
     });
-  }
-});
-
-app.get("/api/matches", async (req, res) => {
-  try {
-    if (!pool) {
-      throw new Error("DATABASE_URL is not set");
-    }
-
-    const result = await pool.query(`
-      SELECT
-        m.id AS match_id,
-        m.match_date,
-        m.location,
-        m.notes,
-        p.id AS player_id,
-        p.name AS player_name,
-        d.id AS deck_id,
-        d.deck_name,
-        mp.result
-      FROM matches m
-      JOIN match_players mp ON m.id = mp.match_id
-      JOIN players p ON mp.player_id = p.id
-      LEFT JOIN decks d ON mp.deck_id = d.id
-      ORDER BY m.match_date DESC, m.id DESC, p.name ASC
-    `);
-
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Error fetching matches:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message || String(error)
-    });
-  }
-});
-
-app.post("/api/matches", async (req, res) => {
-  if (!pool) {
-    return res.status(500).json({
-      success: false,
-      error: "DATABASE_URL is not set"
-    });
-  }
-
-  const { location, notes, players } = req.body;
-
-  if (!players || !Array.isArray(players) || players.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: "players array is required"
-    });
-  }
-
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    const matchResult = await client.query(
-      `
-      INSERT INTO matches (location, notes)
-      VALUES ($1, $2)
-      RETURNING id, match_date, location, notes
-      `,
-      [location || null, notes || null]
-    );
-
-    const match = matchResult.rows[0];
-
-    for (const player of players) {
-      await client.query(
-        `
-        INSERT INTO match_players (match_id, player_id, deck_id, result)
-        VALUES ($1, $2, $3, $4)
-        `,
-        [
-          match.id,
-          player.player_id,
-          player.deck_id || null,
-          player.result
-        ]
-      );
-    }
-
-    await client.query("COMMIT");
-
-    res.status(201).json({
-      success: true,
-      match
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    console.error("Error creating match:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message || String(error)
-    });
-  } finally {
-    client.release();
   }
 });
 
@@ -229,6 +138,25 @@ app.post("/login", async (req, res) => {
       return res.status(401).send("Invalid username or password.");
     }
 
+    req.session.user = {
+      id: dbUser.id,
+      username: dbUser.username,
+      role: dbUser.role
+    };
+
+    const playerResult = await pool.query(
+      `
+      SELECT id, name
+      FROM players
+      WHERE user_id = $1
+      `,
+      [dbUser.id]
+    );
+
+    if (playerResult.rows.length === 0) {
+      return res.redirect("/profile-setup.html");
+    }
+
     if (dbUser.role === "admin") {
       return res.redirect("/leaderboard.html");
     }
@@ -238,6 +166,100 @@ app.post("/login", async (req, res) => {
     console.error("Error logging in:", error);
     res.status(500).send(error.message || "Login failed");
   }
+});
+
+app.get("/api/me", async (req, res) => {
+  try {
+    if (!pool) {
+      throw new Error("DATABASE_URL is not set");
+    }
+
+    if (!req.session.user) {
+      return res.status(401).json({
+        success: false,
+        error: "Not logged in"
+      });
+    }
+
+    const userId = req.session.user.id;
+
+    const result = await pool.query(
+      `
+      SELECT
+        u.id AS user_id,
+        u.username,
+        u.role,
+        p.id AS player_id,
+        p.name AS player_name
+      FROM users u
+      LEFT JOIN players p ON p.user_id = u.id
+      WHERE u.id = $1
+      `,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error("Error fetching current user:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || String(error)
+    });
+  }
+});
+
+app.post("/profile-setup", async (req, res) => {
+  try {
+    if (!pool) {
+      throw new Error("DATABASE_URL is not set");
+    }
+
+    if (!req.session.user) {
+      return res.status(401).send("You must be logged in.");
+    }
+
+    const userId = req.session.user.id;
+    const { player_name } = req.body;
+
+    if (!player_name) {
+      return res.status(400).send("Player name is required.");
+    }
+
+    const existingPlayer = await pool.query(
+      `
+      SELECT id
+      FROM players
+      WHERE user_id = $1
+      `,
+      [userId]
+    );
+
+    if (existingPlayer.rows.length > 0) {
+      return res.redirect("/players.html");
+    }
+
+    await pool.query(
+      `
+      INSERT INTO players (name, user_id)
+      VALUES ($1, $2)
+      `,
+      [player_name, userId]
+    );
+
+    res.redirect("/players.html");
+  } catch (error) {
+    console.error("Error creating player profile:", error);
+    res.status(500).send(error.message || "Profile setup failed");
+  }
+});
+
+app.post("/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.redirect("/sign.html");
+  });
 });
 
 app.listen(PORT, () => {

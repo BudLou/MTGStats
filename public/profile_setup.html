@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile Setup - MTG Stats</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Create Your Player Profile</h1>
+    <p>Enter the player name you want linked to this account.</p>
+
+    <form action="/profile-setup" method="post">
+      <p>
+        <label for="player_name">Player Name:</label>
+        <input type="text" name="player_name" id="player_name" required>
+      </p>
+
+      <input type="submit" value="Save Profile">
+    </form>
+  </main>
+</body>
+</html>
