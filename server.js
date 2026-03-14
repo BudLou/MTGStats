@@ -19,16 +19,23 @@ app.get("/", (req, res) => {
 
 app.get("/test-db", async (req, res) => {
   try {
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({
+        success: false,
+        error: "DATABASE_URL is not set"
+      });
+    }
+
     const result = await pool.query("SELECT NOW() AS now");
     res.json({
       success: true,
       now: result.rows[0].now
     });
   } catch (error) {
-    console.error(error);
+    console.error("DB test failed:", error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message || String(error)
     });
   }
 });
