@@ -48,3 +48,16 @@ SELECT table_name
 FROM information_schema.tables
 WHERE table_schema = 'public'
 ORDER BY table_name;
+
+
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'player',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+ALTER TABLE players
+ADD COLUMN IF NOT EXISTS user_id INTEGER UNIQUE
+REFERENCES users(id) ON DELETE SET NULL;
