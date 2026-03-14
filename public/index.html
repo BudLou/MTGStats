@@ -1,16 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MTG Stats</title>
-  <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
-  <main>
-    <h1>MTG Stats</h1>
-    <p>Your starter site is running.</p>
-    <p>Test the database connection at <code>/test-db</code>.</p>
-  </main>
+
+<h1>MTG Players</h1>
+
+<ul id="player-list"></ul>
+
+<script>
+async function loadPlayers() {
+
+  const response = await fetch('/api/players');
+  const players = await response.json();
+
+  const list = document.getElementById('player-list');
+
+  list.innerHTML = '';
+
+  players.forEach(player => {
+    const li = document.createElement('li');
+    li.textContent = player.name;
+    list.appendChild(li);
+  });
+
+}
+
+loadPlayers();
+</script>
+
 </body>
 </html>
