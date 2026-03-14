@@ -6,20 +6,40 @@
   <title>MTG Stats</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
+
+<script>
+document.getElementById("login-form").addEventListener("submit", function(e) {
+    e.preventDefault();
+
+    const username = document.getElementById("user").value;
+    const password = document.getElementById("pass").value;
+
+    if(username === "admin" && password === "1234") {
+        window.location.href = "/stats.html";
+    } 
+    else if(username === "lou" && password === "1234") {
+        window.location.href = "/players.html";
+    }
+    else {
+        alert("Invalid login");
+    }
+});
+</script>
+
 <body>
   <main>
-    <form>
+    <form id="/login" method="post">
         <p>
             <label for="user">Username:</label>
-            <input type="text" name="user" id="user">
+            <input type="text" name="user" id="user" required>
         </p>
 
         <p>
           <label for="pass">Password:</label>
-          <input type="text" name="pass" id="pass">
+          <input type="password" name="pass" id="pass" required>
         </p>
 
-        <input type="submit">
+        <input type="submit" value="Login">
     </form>
   </main>
 </body>

@@ -1,5 +1,7 @@
 require("dotenv").config();
 
+
+const bcrypt = require("bcrypt");
 const express = require("express");
 const path = require("path");
 const { Pool } = require("pg");
@@ -20,6 +22,7 @@ console.log("DATABASE_URL loaded:", !!databaseUrl);
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -173,3 +176,96 @@ app.post("/api/matches", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+//login route
+app.post("/login", (req, res) => {
+  const { user, pass } = req.body;
+
+  if (user === "" && pass === "1234") {
+    res.redirect("/stats.html");
+  }
+  else if (user === "lou" && pass === "1234") {
+    res.redirect("/players.html");
+  }
+  else if (user === "admin" && pass === "1234") {
+    res.redirect("/leaderboard.html");
+  }
+  else {
+    res.send("Invalid login");
+  }
+});
+
+app.post("/register", async (req, res) => {
+  try {
+    if (!pool) {
+      throw new Error("DATABASE_URL is not set");
+    }
+
+    const { username, password, role } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).send("Username and password are required");
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      `
+      INSERT INTO users (username, password_hash, role)
+      VALUES ($1, $2, $3)
+      `,
+      [username, passwordHash, role || "player"]
+    );
+
+    res.send("User registered successfully");
+  } catch (error) {
+    console.error("Error registering user:", error);
+    res.status(500).send(error.message || "Registration failed");
+  }
+});
+
+app.post("/login", async (req, res) => {
+  try {
+    if (!pool) {
+      throw new Error("DATABASE_URL is not set");
+    }
+
+    const { user, pass } = req.body;
+
+    if (!user || !pass) {
+      return res.status(400).send("Username and password are required");
+    }
+
+    const result = await pool.query(
+      `
+      SELECT id, username, password_hash, role
+      FROM users
+      WHERE username = $1
+      `,
+      [user]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).send("Invalid username or password");
+    }
+
+    const dbUser = result.rows[0];
+
+    const passwordMatches = await bcrypt.compare(pass, dbUser.password_hash);
+
+    if (!passwordMatches) {
+      return res.status(401).send("Invalid username or password");
+    }
+
+    if (dbUser.role === "admin") {
+      return res.redirect("/leaderboard.html");
+    }
+
+    return res.redirect("/players.html");
+  } catch (error) {
+    console.error("Error logging in:", error);
+    res.status(500).send(error.message || "Login failed");
+  }
+});
+
+app.use(express.urlencoded({ extended: true }));

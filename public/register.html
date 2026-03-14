@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register - MTG Stats</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Register User</h1>
+
+    <form action="/register" method="POST">
+      <p>
+        <label for="username">Username:</label>
+        <input type="text" name="username" id="username" required>
+      </p>
+
+      <p>
+        <label for="password">Password:</label>
+        <input type="password" name="password" id="password" required>
+      </p>
+
+      <p>
+        <label for="role">Role:</label>
+        <select name="role" id="role">
+          <option value="player">Player</option>
+          <option value="admin">Admin</option>
+        </select>
+      </p>
+
+      <input type="submit" value="Register">
+    </form>
+
+    <p><a href="/sign.html">Go to Login</a></p>
+  </main>
+</body>
+</html>
