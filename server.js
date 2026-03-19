@@ -430,6 +430,10 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
   try {
     const { location, notes, result, deck_name, format, commander } = req.body;
 
+    if (!deck_name?.trim() && !commander?.trim()) {
+      return res.status(400).send("Please enter either a Deck Name or a Commander.");
+    }
+
     if (!result || !["win", "loss", "draw"].includes(result)) {
       return res.status(400).send("A valid result is required.");
     }
