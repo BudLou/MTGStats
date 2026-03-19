@@ -1,11 +1,3 @@
--- Drop old tables only if you want a full reset.
--- Uncomment in development only.
--- DROP TABLE IF EXISTS match_players CASCADE;
--- DROP TABLE IF EXISTS matches CASCADE;
--- DROP TABLE IF EXISTS decks CASCADE;
--- DROP TABLE IF EXISTS players CASCADE;
--- DROP TABLE IF EXISTS users CASCADE;
-
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
@@ -16,10 +8,28 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS players (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE SET NULL,
   name TEXT NOT NULL UNIQUE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE players
+ADD COLUMN IF NOT EXISTS user_id INTEGER UNIQUE,
+ADD COLUMN IF NOT EXISTS deckbuilding_link TEXT,
+ADD COLUMN IF NOT EXISTS discord_contact TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.table_constraints
+    WHERE constraint_name = 'players_user_id_fkey'
+      AND table_name = 'players'
+  ) THEN
+    ALTER TABLE players
+    ADD CONSTRAINT players_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS decks (
   id SERIAL PRIMARY KEY,
@@ -46,10 +56,6 @@ CREATE TABLE IF NOT EXISTS match_players (
   result TEXT NOT NULL CHECK (result IN ('win', 'loss', 'draw')),
   UNIQUE (match_id, player_id)
 );
-
-ALTER TABLE players
-ADD COLUMN IF NOT EXISTS deckbuilding_link TEXT,
-ADD COLUMN IF NOT EXISTS discord_contact TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_players_user_id ON players(user_id);
 CREATE INDEX IF NOT EXISTS idx_decks_player_id ON decks(player_id);
