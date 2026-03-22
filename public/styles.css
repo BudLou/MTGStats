@@ -49,3 +49,9 @@ h1 {
   color: #f9fafb;
 }
 
+.profile-link {
+  color: #f9fafb;
+  position: fixed;
+  top: 10px;
+  right: 20px;
+}

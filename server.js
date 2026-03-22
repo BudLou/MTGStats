@@ -51,7 +51,7 @@ function requireDatabase(req, res, next) {
 
 function requireLogin(req, res, next) {
   if (!req.session.user) {
-    return res.redirect("/sign.html");
+    return res.redirect("/sign.html?next=/profile");
   }
   next();
 }
@@ -344,7 +344,7 @@ app.post("/login", requireDatabase, async (req, res) => {
   }
 });
 
-app.get("/profile.html", requireLogin, (req, res) => {
+app.get("/profile", requireLogin, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "profile.html"));
 });
 
