@@ -29,7 +29,19 @@
           <button type="button">Sign Up</button>
         </a>
 
+        <input type="hidden" name="next" id="next">
+
     </form>
   </main>
+  
+  <script>
+  const params = new URLSearchParams(window.location.search);
+  const next = params.get("next");
+
+  if (next) {
+    document.getElementById("next").value = next;
+  }
+</script>
+
 </body>
 </html>

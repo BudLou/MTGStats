@@ -299,7 +299,7 @@ app.post("/register", requireDatabase, async (req, res) => {
 
 app.post("/login", requireDatabase, async (req, res) => {
   try {
-    const { user, pass } = req.body;
+    const { user, pass, next } = req.body;
 
     if (!user || !pass) {
       return res.status(400).send("Username and password are required.");
@@ -337,6 +337,10 @@ app.post("/login", requireDatabase, async (req, res) => {
       return res.redirect("/profile-setup.html");
     }
 
+    if (next && next.trim()) {
+      return res.redirect(next.trim());
+    }
+
     return res.redirect("/add_game.html");
   } catch (error) {
     console.error("Error logging in:", error);
@@ -344,9 +348,12 @@ app.post("/login", requireDatabase, async (req, res) => {
   }
 });
 
-app.get("/profile", requireLogin, (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "profile.html"));
-});
+function requireLogin(req, res, next) {
+  if (!req.session.user) {
+    return res.redirect("/sign.html?next=/profile");
+  }
+  next();
+}
 
 app.get("/profile-setup.html", requireDatabase, requireLogin, async (req, res) => {
   try {
