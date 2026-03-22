@@ -13,6 +13,19 @@
 
     <form action="/add-game" method="POST" onsubmit="return validateDeckOrCommander()">
       <p>
+        <label for="player_count">Number of Players:</label>
+        <input type="text" name="player_count" id="player_count">
+        <label for="player_num">Player #:</label>
+        <select name="player_num" id="player_num">
+          <option value="">Select a #</option>
+          <option value="Player 1">Player 1</option>
+          <option value="Player 2">Player 2</option>
+          <option value="Player 3">Player 3</option>
+          <option value="Player 4">Player 4</option>
+        </select>
+      </p>
+
+      <p>
         <label for="deck_name">Deck Name:</label>
         <input type="text" name="deck_name" id="deck_name">
         <label for="commander">Or Commander:</label>
@@ -26,7 +39,7 @@
       </p>
 
       <p>
-        <label for="format">Commander:</label>
+        <label for="format">Format:</label>
         <select name="format" id="format">
           <option value="">Select a format</option>
           <option value="commander">Commander</option>
@@ -35,7 +48,7 @@
       </p>
 
       <p>
-        <label for="result">Result:</label>
+        <label for="result">Player Result:</label>
         <select name="result" id="result" required>
           <option value="">Select a result</option>
           <option value="win">Win</option>

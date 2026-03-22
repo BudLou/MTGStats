@@ -344,6 +344,10 @@ app.post("/login", requireDatabase, async (req, res) => {
   }
 });
 
+app.get("/profile.html", requireLogin, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "profile.html"));
+});
+
 app.get("/profile-setup.html", requireDatabase, requireLogin, async (req, res) => {
   try {
     const linkedPlayer = await getPlayerByUserId(req.session.user.id);
@@ -499,6 +503,85 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
   } catch (error) {
     console.error("Error adding game:", error);
     res.status(500).send(error.message || "Failed to add game.");
+  }
+});
+
+app.get("/api/my-games", requireDatabase, requireLogin, async (req, res) => {
+  try {
+    const { day, location, deck_name, player_count } = req.query;
+
+    const conditions = [`m.created_by_user_id = $1`];
+    const values = [req.session.user.id];
+    let paramIndex = 2;
+
+    if (day && day.trim()) {
+      conditions.push(`DATE(m.match_date) = $${paramIndex}`);
+      values.push(day.trim());
+      paramIndex++;
+    }
+
+    if (location && location.trim()) {
+      conditions.push(`LOWER(COALESCE(m.location, '')) LIKE LOWER($${paramIndex})`);
+      values.push(`%${location.trim()}%`);
+      paramIndex++;
+    }
+
+    if (deck_name && deck_name.trim()) {
+      conditions.push(`
+        EXISTS (
+          SELECT 1
+          FROM match_players mp2
+          LEFT JOIN decks d2 ON d2.id = mp2.deck_id
+          WHERE mp2.match_id = m.id
+            AND LOWER(COALESCE(d2.deck_name, '')) LIKE LOWER($${paramIndex})
+        )
+      `);
+      values.push(`%${deck_name.trim()}%`);
+      paramIndex++;
+    }
+
+    if (player_count && !Number.isNaN(Number(player_count))) {
+      conditions.push(`
+        (
+          SELECT COUNT(*)
+          FROM match_players mp3
+          WHERE mp3.match_id = m.id
+        ) = $${paramIndex}
+      `);
+      values.push(Number(player_count));
+      paramIndex++;
+    }
+
+    const query = `
+      SELECT
+        m.id,
+        m.match_date,
+        m.location,
+        m.notes,
+        COUNT(mp.id) AS player_count,
+        STRING_AGG(DISTINCT p.name, ', ') AS players,
+        STRING_AGG(DISTINCT d.deck_name, ', ') AS deck_names
+      FROM matches m
+      LEFT JOIN match_players mp ON mp.match_id = m.id
+      LEFT JOIN players p ON p.id = mp.player_id
+      LEFT JOIN decks d ON d.id = mp.deck_id
+      WHERE ${conditions.join(" AND ")}
+      GROUP BY m.id, m.match_date, m.location, m.notes
+      ORDER BY m.match_date DESC, m.id DESC
+    `;
+
+    const result = await pool.query(query, values);
+
+    res.json({
+      success: true,
+      games: result.rows
+    });
+  } catch (error) {
+    console.error("Error fetching user games:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || String(error)
+    });
   }
 });
 

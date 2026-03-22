@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile - MTG Stats</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Your Profile</h1>
+
+    <section>
+      <h2>Account Info</h2>
+      <p><strong>Username:</strong> <span id="username"></span></p>
+      <p><strong>Player Name:</strong> <span id="player_name"></span></p>
+      <p><strong>Deckbuilding Link:</strong> <span id="deckbuilding_link"></span></p>
+      <p><strong>Socials:</strong> <span id="discord_contact"></span></p>
+    </section>
+
+    <section>
+      <h2>Your Created Games</h2>
+
+      <form id="filter-form">
+        <p>
+          <label for="day">Day:</label>
+          <input type="date" id="day" name="day">
+        </p>
+
+        <p>
+          <label for="location">Location:</label>
+          <input type="text" id="location" name="location">
+        </p>
+
+        <p>
+          <label for="deck_name">Deck Name:</label>
+          <input type="text" id="deck_name" name="deck_name">
+        </p>
+
+        <p>
+          <label for="player_count">Player Count:</label>
+          <input type="number" id="player_count" name="player_count" min="1">
+        </p>
+
+        <p>
+          <button type="submit">Apply Filters</button>
+          <button type="button" id="clear-filters">Clear Filters</button>
+        </p>
+      </form>
+
+      <div id="games-list">
+        <p>Loading games...</p>
+      </div>
+    </section>
+
+    <p>
+      <a href="/logout" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">Log out</a>
+    </p>
+    <form id="logout-form" action="/logout" method="POST" style="display:none;"></form>
+  </main>
+
+  <script>
+    async function loadProfile() {
+      const res = await fetch("/api/me");
+      const data = await res.json();
+
+      if (data.success && data.user) {
+        document.getElementById("username").textContent = data.user.username || "";
+        document.getElementById("player_name").textContent = data.user.player_name || "";
+        document.getElementById("deckbuilding_link").textContent = data.user.deckbuilding_link || "None";
+        document.getElementById("discord_contact").textContent = data.user.discord_contact || "None";
+      }
+    }
+
+    async function loadGames() {
+      const day = document.getElementById("day").value;
+      const location = document.getElementById("location").value.trim();
+      const deckName = document.getElementById("deck_name").value.trim();
+      const playerCount = document.getElementById("player_count").value.trim();
+
+      const params = new URLSearchParams();
+
+      if (day) params.append("day", day);
+      if (location) params.append("location", location);
+      if (deckName) params.append("deck_name", deckName);
+      if (playerCount) params.append("player_count", playerCount);
+
+      const res = await fetch(`/api/my-games?${params.toString()}`);
+      const data = await res.json();
+
+      const container = document.getElementById("games-list");
+
+      if (!data.success) {
+        container.innerHTML = `<p>Failed to load games.</p>`;
+        return;
+      }
+
+      if (!data.games || data.games.length === 0) {
+        container.innerHTML = `<p>No games found.</p>`;
+        return;
+      }
+
+      container.innerHTML = data.games.map(game => `
+        <article class="game-card">
+          <h3>Game ID: ${game.id}</h3>
+          <p><strong>Date:</strong> ${new Date(game.match_date).toLocaleString()}</p>
+          <p><strong>Location:</strong> ${game.location || "None"}</p>
+          <p><strong>Player Count:</strong> ${game.player_count}</p>
+          <p><strong>Players:</strong> ${game.players || "None"}</p>
+          <p><strong>Decks:</strong> ${game.deck_names || "None"}</p>
+          <p><strong>Notes:</strong> ${game.notes || "None"}</p>
+        </article>
+      `).join("");
+    }
+
+    document.getElementById("filter-form").addEventListener("submit", function(event) {
+      event.preventDefault();
+      loadGames();
+    });
+
+    document.getElementById("clear-filters").addEventListener("click", function() {
+      document.getElementById("day").value = "";
+      document.getElementById("location").value = "";
+      document.getElementById("deck_name").value = "";
+      document.getElementById("player_count").value = "";
+      loadGames();
+    });
+
+    loadProfile();
+    loadGames();
+  </script>
+</body>
+</html>
