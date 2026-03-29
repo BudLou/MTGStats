@@ -42,33 +42,40 @@
       }
 
       container.innerHTML = `
-        <section class="player-list">
+      <table class="leaderboard">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Player</th>
+            <th>Games</th>
+            <th>Wins</th>
+            <th>Losses</th>
+            <th>Win %</th>
+            <th>Loss %</th>
+          </tr>
+        </thead>
+        <tbody>
           ${players.map((player, index) => {
-            const safeName = escapeHtml(player.name || "Unknown");
-            const totalGames = Number(player.total_games || 0);
-            const wins = Number(player.wins || 0);
-            const losses = Number(player.losses || 0);
-            const winRate = Number(player.win_rate || 0).toFixed(2);
-            const lossRate = Number(player.loss_rate || 0).toFixed(2);
-
-            const playerNameHtml = player.deckbuilding_link
-              ? `<a href="${escapeHtml(player.deckbuilding_link)}" target="_blank" rel="noopener noreferrer">${safeName}</a>`
-              : safeName;
+            const name = player.deckbuilding_link
+              ? `<a href="${escapeHtml(player.deckbuilding_link)}" target="_blank">${escapeHtml(player.name)}</a>`
+              : escapeHtml(player.name);
 
             return `
-              <article class="player-card">
-                <h2>#${index + 1} ${playerNameHtml}</h2>
-                <p><strong>Total Games:</strong> ${totalGames}</p>
-                <p><strong>Wins:</strong> ${wins}</p>
-                <p><strong>Losses:</strong> ${losses}</p>
-                <p><strong>Win Rate:</strong> ${winRate}%</p>
-                <p><strong>Loss Rate:</strong> ${lossRate}%</p>
-              </article>
+              <tr>
+                <td>${index + 1}</td>
+                <td>${name}</td>
+                <td>${player.total_games}</td>
+                <td>${player.wins}</td>
+                <td>${player.losses}</td>
+                <td>${Number(player.win_rate).toFixed(1)}%</td>
+                <td>${Number(player.loss_rate).toFixed(1)}%</td>
+              </tr>
             `;
           }).join("")}
-        </section>
-      `;
-    }
+        </tbody>
+      </table>
+    `;
+  }
 
     async function loadPlayers() {
       const container = document.getElementById("players-list");

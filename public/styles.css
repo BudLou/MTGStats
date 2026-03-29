@@ -56,29 +56,37 @@ h1 {
   right: 20px;
 }
 
-.player-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.leaderboard {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
 }
 
-.player-card {
-  border: 1px solid #374151;
-  border-radius: 10px;
-  padding: 16px;
+.leaderboard th,
+.leaderboard td {
+  padding: 12px;
+  text-align: center;
+}
+
+.leaderboard th {
+  background: #1f2937;
+  font-weight: bold;
+  border-bottom: 2px solid #374151;
+}
+
+.leaderboard tr {
+  border-bottom: 1px solid #374151;
+}
+
+.leaderboard tr:hover {
   background: #1f2937;
 }
 
-.player-card h2 {
-  margin-top: 0;
-  margin-bottom: 10px;
-}
-
-.player-card a {
+.leaderboard a {
   color: #93c5fd;
   text-decoration: none;
 }
 
-.player-card a:hover {
+.leaderboard a:hover {
   text-decoration: underline;
 }
