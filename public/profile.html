@@ -14,8 +14,8 @@
       <h2>Account Info</h2>
       <p><strong>Username:</strong> <span id="username"></span></p>
       <p><strong>Player Name:</strong> <span id="player_name"></span></p>
-      <p><strong>Deckbuilding Link:</strong> <span id="deckbuilding_link"></span></p>
-      <p><strong>Socials:</strong> <span id="discord_contact"></span></p>
+      <p><strong>Deckbuilding Link:</strong> <a id="deckbuilding_link" href="#" target="_blank"></a></p>
+      <p><strong>Socials:</strong> <a id="discord_contact" href="#" target="_blank"></a></p>
     </section>
 
     <section>
@@ -67,8 +67,30 @@
       if (data.success && data.user) {
         document.getElementById("username").textContent = data.user.username || "";
         document.getElementById("player_name").textContent = data.user.player_name || "";
-        document.getElementById("deckbuilding_link").textContent = data.user.deckbuilding_link || "None";
-        document.getElementById("discord_contact").textContent = data.user.discord_contact || "None";
+
+        // Deck link
+        const linkEl = document.getElementById("deckbuilding_link");
+        if (data.user.deckbuilding_link) {
+          linkEl.href = data.user.deckbuilding_link;
+          linkEl.textContent = "View Deck";
+        } else {
+          linkEl.textContent = "None";
+          linkEl.removeAttribute("href");
+        }
+
+        // Discord (smart handling)
+        const discordEl = document.getElementById("discord_contact");
+        const discord = data.user.discord_contact;
+
+        if (discord) {
+          if (discord.startsWith("http")) {
+            discordEl.innerHTML = `<a href="${discord}" target="_blank" rel="noopener noreferrer">Open Discord</a>`;
+          } else {
+            discordEl.textContent = discord;
+          }
+        } else {
+          discordEl.textContent = "None";
+        }
       }
     }
 
