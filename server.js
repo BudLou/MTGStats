@@ -51,7 +51,7 @@ function requireDatabase(req, res, next) {
 
 function requireLogin(req, res, next) {
   if (!req.session.user) {
-    return res.redirect("/sign.html?next=/profile");
+    return res.redirect("/sign.html?next=/profile.html");
   }
   next();
 }
@@ -91,6 +91,74 @@ async function requirePlayerProfile(req, res, next) {
     console.error("Error checking player profile:", error);
     res.status(500).send(error.message || "Failed to verify player profile.");
   }
+}
+
+function parsePositiveInteger(value) {
+  const num = Number(value);
+  return Number.isInteger(num) && num > 0 ? num : null;
+}
+
+async function findOrCreateDeck({ playerId, deckName, format, commander }) {
+  const cleanDeckName = deckName && deckName.trim() ? deckName.trim() : null;
+  const cleanCommander = commander && commander.trim() ? commander.trim() : null;
+  const cleanFormat = format && format.trim() ? format.trim() : "Commander";
+
+  if (!cleanDeckName && !cleanCommander) {
+    return null;
+  }
+
+  if (cleanDeckName) {
+    const existingDeck = await pool.query(
+      `
+      SELECT id
+      FROM decks
+      WHERE player_id = $1
+        AND deck_name = $2
+      `,
+      [playerId, cleanDeckName]
+    );
+
+    if (existingDeck.rows.length > 0) {
+      return existingDeck.rows[0].id;
+    }
+
+    const newDeck = await pool.query(
+      `
+      INSERT INTO decks (player_id, deck_name, format, commander)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id
+      `,
+      [playerId, cleanDeckName, cleanFormat, cleanCommander]
+    );
+
+    return newDeck.rows[0].id;
+  }
+
+  const generatedDeckName = `${cleanCommander} Deck`;
+  const existingCommanderDeck = await pool.query(
+    `
+    SELECT id
+    FROM decks
+    WHERE player_id = $1
+      AND commander = $2
+    `,
+    [playerId, cleanCommander]
+  );
+
+  if (existingCommanderDeck.rows.length > 0) {
+    return existingCommanderDeck.rows[0].id;
+  }
+
+  const newDeck = await pool.query(
+    `
+    INSERT INTO decks (player_id, deck_name, format, commander)
+    VALUES ($1, $2, $3, $4)
+    RETURNING id
+    `,
+    [playerId, generatedDeckName, cleanFormat, cleanCommander]
+  );
+
+  return newDeck.rows[0].id;
 }
 
 app.get("/", (req, res) => {
@@ -178,6 +246,21 @@ app.get("/init-schema", requireDatabase, async (req, res) => {
     `);
 
     await pool.query(`
+      ALTER TABLE matches
+      ADD COLUMN IF NOT EXISTS player_count INTEGER;
+    `);
+
+    await pool.query(`
+      ALTER TABLE matches
+      DROP CONSTRAINT IF EXISTS matches_player_count_check;
+    `);
+
+    await pool.query(`
+      ALTER TABLE matches
+      ADD CONSTRAINT matches_player_count_check CHECK (player_count IS NULL OR player_count > 1);
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS match_players (
         id SERIAL PRIMARY KEY,
         match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
@@ -186,6 +269,27 @@ app.get("/init-schema", requireDatabase, async (req, res) => {
         result TEXT NOT NULL CHECK (result IN ('win', 'loss', 'draw')),
         UNIQUE (match_id, player_id)
       );
+    `);
+
+    await pool.query(`
+      ALTER TABLE match_players
+      ADD COLUMN IF NOT EXISTS player_num INTEGER;
+    `);
+
+    await pool.query(`
+      ALTER TABLE match_players
+      DROP CONSTRAINT IF EXISTS match_players_player_num_check;
+    `);
+
+    await pool.query(`
+      ALTER TABLE match_players
+      ADD CONSTRAINT match_players_player_num_check CHECK (player_num IS NULL OR player_num > 0);
+    `);
+
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_match_player_num
+      ON match_players(match_id, player_num)
+      WHERE player_num IS NOT NULL;
     `);
 
     await pool.query(`
@@ -348,13 +452,6 @@ app.post("/login", requireDatabase, async (req, res) => {
   }
 });
 
-function requireLogin(req, res, next) {
-  if (!req.session.user) {
-    return res.redirect("/sign.html?next=/profile");
-  }
-  next();
-}
-
 app.get("/profile-setup.html", requireDatabase, requireLogin, async (req, res) => {
   try {
     const linkedPlayer = await getPlayerByUserId(req.session.user.id);
@@ -380,14 +477,8 @@ app.post("/profile-setup", requireDatabase, requireLogin, async (req, res) => {
     }
 
     const cleanPlayerName = player_name.trim();
-    const cleanDeckLink =
-      deckbuilding_link && deckbuilding_link.trim()
-        ? deckbuilding_link.trim()
-        : null;
-    const cleanDiscord =
-      discord_contact && discord_contact.trim()
-        ? discord_contact.trim()
-        : null;
+    const cleanDeckLink = deckbuilding_link && deckbuilding_link.trim() ? deckbuilding_link.trim() : null;
+    const cleanDiscord = discord_contact && discord_contact.trim() ? discord_contact.trim() : null;
 
     const existingLinkedPlayer = await getPlayerByUserId(userId);
 
@@ -437,9 +528,13 @@ app.get("/add_game.html", requireDatabase, requireLogin, requirePlayerProfile, (
   res.sendFile(publicFile("add_game.html"));
 });
 
+app.get("/join_game.html", requireDatabase, requireLogin, requirePlayerProfile, (req, res) => {
+  res.sendFile(publicFile("join_game.html"));
+});
+
 app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
   try {
-    const { location, notes, result, deck_name, format, commander } = req.body;
+    const { location, notes, result, deck_name, format, commander, player_count, player_num } = req.body;
 
     if (!deck_name?.trim() && !commander?.trim()) {
       return res.status(400).send("Please enter either a Deck Name or a Commander.");
@@ -449,50 +544,35 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
       return res.status(400).send("A valid result is required.");
     }
 
-    let deckId = null;
+    const cleanPlayerCount = parsePositiveInteger(player_count);
+    const cleanPlayerNum = parsePositiveInteger(player_num);
 
-    if (deck_name && deck_name.trim()) {
-      const existingDeck = await pool.query(
-        `
-        SELECT id
-        FROM decks
-        WHERE player_id = $1
-          AND deck_name = $2
-        `,
-        [req.player.id, deck_name.trim()]
-      );
-
-      if (existingDeck.rows.length > 0) {
-        deckId = existingDeck.rows[0].id;
-      } else {
-        const newDeck = await pool.query(
-          `
-          INSERT INTO decks (player_id, deck_name, format, commander)
-          VALUES ($1, $2, $3, $4)
-          RETURNING id
-          `,
-          [
-            req.player.id,
-            deck_name.trim(),
-            format && format.trim() ? format.trim() : "Commander",
-            commander && commander.trim() ? commander.trim() : null
-          ]
-        );
-
-        deckId = newDeck.rows[0].id;
-      }
+    if (!cleanPlayerCount || cleanPlayerCount < 2) {
+      return res.status(400).send("A valid player count of at least 2 is required.");
     }
+
+    if (!cleanPlayerNum || cleanPlayerNum > cleanPlayerCount) {
+      return res.status(400).send("A valid player number is required.");
+    }
+
+    const deckId = await findOrCreateDeck({
+      playerId: req.player.id,
+      deckName: deck_name,
+      format,
+      commander
+    });
 
     const matchInsert = await pool.query(
       `
-      INSERT INTO matches (location, notes, created_by_user_id)
-      VALUES ($1, $2, $3)
+      INSERT INTO matches (location, notes, created_by_user_id, player_count)
+      VALUES ($1, $2, $3, $4)
       RETURNING id
       `,
       [
         location && location.trim() ? location.trim() : null,
         notes && notes.trim() ? notes.trim() : null,
-        req.session.user.id
+        req.session.user.id,
+        cleanPlayerCount
       ]
     );
 
@@ -500,16 +580,188 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
 
     await pool.query(
       `
-      INSERT INTO match_players (match_id, player_id, deck_id, result)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO match_players (match_id, player_id, deck_id, result, player_num)
+      VALUES ($1, $2, $3, $4, $5)
       `,
-      [matchId, req.player.id, deckId, result]
+      [matchId, req.player.id, deckId, result, cleanPlayerNum]
     );
 
-    res.redirect("/add_game.html");
+    res.redirect(`/join_game.html?match_id=${matchId}`);
   } catch (error) {
     console.error("Error adding game:", error);
     res.status(500).send(error.message || "Failed to add game.");
+  }
+});
+
+app.post("/join-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
+  try {
+    const { match_id, player_num, result, deck_name, format, commander } = req.body;
+
+    if (!deck_name?.trim() && !commander?.trim()) {
+      return res.status(400).send("Please enter either a Deck Name or a Commander.");
+    }
+
+    if (!result || !["win", "loss", "draw"].includes(result)) {
+      return res.status(400).send("A valid result is required.");
+    }
+
+    const cleanMatchId = parsePositiveInteger(match_id);
+    const cleanPlayerNum = parsePositiveInteger(player_num);
+
+    if (!cleanMatchId) {
+      return res.status(400).send("A valid game ID is required.");
+    }
+
+    const matchResult = await pool.query(
+      `
+      SELECT id, player_count
+      FROM matches
+      WHERE id = $1
+      `,
+      [cleanMatchId]
+    );
+
+    if (matchResult.rows.length === 0) {
+      return res.status(404).send("Game not found.");
+    }
+
+    const match = matchResult.rows[0];
+
+    if (!cleanPlayerNum || cleanPlayerNum > match.player_count) {
+      return res.status(400).send("That player number is not valid for this game.");
+    }
+
+    const alreadyJoined = await pool.query(
+      `
+      SELECT id
+      FROM match_players
+      WHERE match_id = $1
+        AND player_id = $2
+      `,
+      [cleanMatchId, req.player.id]
+    );
+
+    if (alreadyJoined.rows.length > 0) {
+      return res.status(409).send("You have already joined this game.");
+    }
+
+    const seatTaken = await pool.query(
+      `
+      SELECT id
+      FROM match_players
+      WHERE match_id = $1
+        AND player_num = $2
+      `,
+      [cleanMatchId, cleanPlayerNum]
+    );
+
+    if (seatTaken.rows.length > 0) {
+      return res.status(409).send("That player number has already been chosen.");
+    }
+
+    const joinedCountResult = await pool.query(
+      `
+      SELECT COUNT(*)::INT AS joined_count
+      FROM match_players
+      WHERE match_id = $1
+      `,
+      [cleanMatchId]
+    );
+
+    if (joinedCountResult.rows[0].joined_count >= match.player_count) {
+      return res.status(409).send("This game is already full.");
+    }
+
+    const deckId = await findOrCreateDeck({
+      playerId: req.player.id,
+      deckName: deck_name,
+      format,
+      commander
+    });
+
+    await pool.query(
+      `
+      INSERT INTO match_players (match_id, player_id, deck_id, result, player_num)
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [cleanMatchId, req.player.id, deckId, result, cleanPlayerNum]
+    );
+
+    res.redirect(`/join_game.html?match_id=${cleanMatchId}`);
+  } catch (error) {
+    console.error("Error joining game:", error);
+
+    if (error.code === "23505") {
+      return res.status(409).send("That player number has already been chosen.");
+    }
+
+    res.status(500).send(error.message || "Failed to join game.");
+  }
+});
+
+app.get("/api/matches/:id/open-seats", requireDatabase, requireLogin, async (req, res) => {
+  try {
+    const matchId = parsePositiveInteger(req.params.id);
+
+    if (!matchId) {
+      return res.status(400).json({ success: false, error: "Invalid game ID." });
+    }
+
+    const matchResult = await pool.query(
+      `
+      SELECT id, match_date, location, notes, player_count, created_by_user_id
+      FROM matches
+      WHERE id = $1
+      `,
+      [matchId]
+    );
+
+    if (matchResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Game not found." });
+    }
+
+    const takenResult = await pool.query(
+      `
+      SELECT mp.player_num, p.name AS player_name
+      FROM match_players mp
+      JOIN players p ON p.id = mp.player_id
+      WHERE mp.match_id = $1
+      ORDER BY mp.player_num ASC
+      `,
+      [matchId]
+    );
+
+    const match = matchResult.rows[0];
+    const takenSeats = takenResult.rows;
+    const openSeats = [];
+    const takenSeatNumbers = takenSeats.map((row) => row.player_num);
+
+    for (let seat = 1; seat <= match.player_count; seat++) {
+      if (!takenSeatNumbers.includes(seat)) {
+        openSeats.push(seat);
+      }
+    }
+
+    res.json({
+      success: true,
+      match: {
+        id: match.id,
+        match_date: match.match_date,
+        location: match.location,
+        notes: match.notes,
+        player_count: match.player_count,
+        created_by_user_id: match.created_by_user_id
+      },
+      taken_seats: takenSeats,
+      open_seats: openSeats,
+      joined_count: takenSeats.length
+    });
+  } catch (error) {
+    console.error("Error fetching open seats:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || String(error)
+    });
   }
 });
 
@@ -548,13 +800,7 @@ app.get("/api/my-games", requireDatabase, requireLogin, async (req, res) => {
     }
 
     if (player_count && !Number.isNaN(Number(player_count))) {
-      conditions.push(`
-        (
-          SELECT COUNT(*)
-          FROM match_players mp3
-          WHERE mp3.match_id = m.id
-        ) = $${paramIndex}
-      `);
+      conditions.push(`m.player_count = $${paramIndex}`);
       values.push(Number(player_count));
       paramIndex++;
     }
@@ -565,15 +811,16 @@ app.get("/api/my-games", requireDatabase, requireLogin, async (req, res) => {
         m.match_date,
         m.location,
         m.notes,
-        COUNT(mp.id) AS player_count,
-        STRING_AGG(DISTINCT p.name, ', ') AS players,
-        STRING_AGG(DISTINCT d.deck_name, ', ') AS deck_names
+        m.player_count,
+        COUNT(mp.id) AS joined_count,
+        STRING_AGG(DISTINCT p.name, ', ' ORDER BY p.name) AS players,
+        STRING_AGG(DISTINCT d.deck_name, ', ' ORDER BY d.deck_name) AS deck_names
       FROM matches m
       LEFT JOIN match_players mp ON mp.match_id = m.id
       LEFT JOIN players p ON p.id = mp.player_id
       LEFT JOIN decks d ON d.id = mp.deck_id
       WHERE ${conditions.join(" AND ")}
-      GROUP BY m.id, m.match_date, m.location, m.notes
+      GROUP BY m.id, m.match_date, m.location, m.notes, m.player_count
       ORDER BY m.match_date DESC, m.id DESC
     `;
 

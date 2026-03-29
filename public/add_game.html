@@ -8,20 +8,27 @@
 </head>
 <body>
   <main>
-    <h1>Add a Game</h1>
-    <p>Log a match result for your linked player profile.</p>
+    <h1>Create a Game</h1>
+    <p>Create a new match, choose your seat, and get a game ID for other players to join.</p>
 
-    <form action="/add-game" method="POST" onsubmit="return validateDeckOrCommander()">
+    <form action="/add-game" method="POST" onsubmit="return validateCreateGameForm()">
       <p>
         <label for="player_count">Number of Players:</label>
-        <input type="text" name="player_count" id="player_count">
-        <label for="player_num">Player #:</label>
-        <select name="player_num" id="player_num">
+        <input type="number" name="player_count" id="player_count" min="2" max="8" required>
+      </p>
+
+      <p>
+        <label for="player_num">Your Player #:</label>
+        <select name="player_num" id="player_num" required>
           <option value="">Select a #</option>
-          <option value="Player 1">Player 1</option>
-          <option value="Player 2">Player 2</option>
-          <option value="Player 3">Player 3</option>
-          <option value="Player 4">Player 4</option>
+          <option value="1">Player 1</option>
+          <option value="2">Player 2</option>
+          <option value="3">Player 3</option>
+          <option value="4">Player 4</option>
+          <option value="5">Player 5</option>
+          <option value="6">Player 6</option>
+          <option value="7">Player 7</option>
+          <option value="8">Player 8</option>
         </select>
       </p>
 
@@ -33,22 +40,15 @@
       </p>
 
       <p>
-        <label for="deck_link">Deck Link:</label>
-        <input type="link" name="deck_link" id="deck_link">
-        <label for="deck_link">(Optional)</label>
-      </p>
-
-      <p>
         <label for="format">Format:</label>
         <select name="format" id="format">
-          <option value="">Select a format</option>
-          <option value="commander">Commander</option>
-          <option value="cedh">cEDH</option>
+          <option value="Commander">Commander</option>
+          <option value="cEDH">cEDH</option>
         </select>
       </p>
 
       <p>
-        <label for="result">Player Result:</label>
+        <label for="result">Your Result:</label>
         <select name="result" id="result" required>
           <option value="">Select a result</option>
           <option value="win">Win</option>
@@ -67,8 +67,15 @@
         <textarea name="notes" id="notes" rows="4"></textarea>
       </p>
 
-      <input type="submit" value="Log Game">
+      <input type="submit" value="Create Game">
     </form>
+
+    <hr>
+
+    <p>
+      Already have a game ID?
+      <a href="/join_game.html">Join a game here</a>
+    </p>
 
     <p>
       <a href="/logout" onclick="event.preventDefault(); document.getElementById('logout-form').submit();">Log out</a>
@@ -78,18 +85,35 @@
   </main>
 
   <script>
-    function validateDeckOrCommander() {
+    function validateCreateGameForm() {
+      const playerCount = Number(document.getElementById("player_count").value);
+      const playerNum = Number(document.getElementById("player_num").value);
       const deck = document.getElementById("deck_name").value.trim();
       const commander = document.getElementById("commander").value.trim();
+      const result = document.getElementById("result").value;
+
+      if (!Number.isInteger(playerCount) || playerCount < 2) {
+        alert("Please enter a valid number of players.");
+        return false;
+      }
+
+      if (!Number.isInteger(playerNum) || playerNum < 1 || playerNum > playerCount) {
+        alert("Please choose a valid player number for this game.");
+        return false;
+      }
 
       if (!deck && !commander) {
         alert("Please enter either a Deck Name or a Commander.");
         return false;
       }
 
+      if (!result) {
+        alert("Please choose a result.");
+        return false;
+      }
+
       return true;
     }
   </script>
-
 </body>
 </html>

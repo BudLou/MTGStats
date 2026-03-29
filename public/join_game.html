@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join Game - MTG Stats</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Join a Game</h1>
+    <p>Enter a game ID to see which player numbers are still available.</p>
+
+    <form id="lookup-form">
+      <p>
+        <label for="lookup_match_id">Game ID:</label>
+        <input type="number" id="lookup_match_id" min="1" required>
+        <button type="submit">Load Game</button>
+      </p>
+    </form>
+
+    <section id="game-info" style="display:none;">
+      <h2>Game Details</h2>
+      <p><strong>Game ID:</strong> <span id="game_id_text"></span></p>
+      <p><strong>Location:</strong> <span id="game_location"></span></p>
+      <p><strong>Date:</strong> <span id="game_date"></span></p>
+      <p><strong>Seats Filled:</strong> <span id="game_filled"></span></p>
+      <p><strong>Taken Seats:</strong> <span id="taken_seats"></span></p>
+    </section>
+
+    <form id="join-form" action="/join-game" method="POST" style="display:none;" onsubmit="return validateJoinForm()">
+      <input type="hidden" name="match_id" id="match_id">
+
+      <p>
+        <label for="player_num">Available Player #:</label>
+        <select name="player_num" id="player_num" required>
+          <option value="">Load a game first</option>
+        </select>
+      </p>
+
+      <p>
+        <label for="deck_name">Deck Name:</label>
+        <input type="text" name="deck_name" id="deck_name">
+        <label for="commander">Or Commander:</label>
+        <input type="text" name="commander" id="commander">
+      </p>
+
+      <p>
+        <label for="format">Format:</label>
+        <select name="format" id="format">
+          <option value="Commander">Commander</option>
+          <option value="cEDH">cEDH</option>
+        </select>
+      </p>
+
+      <p>
+        <label for="result">Your Result:</label>
+        <select name="result" id="result" required>
+          <option value="">Select a result</option>
+          <option value="win">Win</option>
+          <option value="loss">Loss</option>
+          <option value="draw">Draw</option>
+        </select>
+      </p>
+
+      <button type="submit">Join Game</button>
+    </form>
+
+    <p id="status-message"></p>
+
+    <hr>
+
+    <p>
+      Want to make your own game instead?
+      <a href="/add_game.html">Create one here</a>
+    </p>
+  </main>
+
+  <script>
+    async function loadGame(matchId) {
+      const statusMessage = document.getElementById("status-message");
+      const gameInfo = document.getElementById("game-info");
+      const joinForm = document.getElementById("join-form");
+      const playerNumSelect = document.getElementById("player_num");
+
+      statusMessage.textContent = "Loading game...";
+      gameInfo.style.display = "none";
+      joinForm.style.display = "none";
+      playerNumSelect.innerHTML = '<option value="">Loading...</option>';
+
+      try {
+        const res = await fetch(`/api/matches/${matchId}/open-seats`);
+        const data = await res.json();
+
+        if (!data.success) {
+          statusMessage.textContent = data.error || "Unable to load game.";
+          return;
+        }
+
+        document.getElementById("match_id").value = data.match.id;
+        document.getElementById("game_id_text").textContent = data.match.id;
+        document.getElementById("game_location").textContent = data.match.location || "None";
+        document.getElementById("game_date").textContent = new Date(data.match.match_date).toLocaleString();
+        document.getElementById("game_filled").textContent = `${data.joined_count} / ${data.match.player_count}`;
+        document.getElementById("taken_seats").textContent = data.taken_seats.length
+          ? data.taken_seats.map(seat => `Player ${seat.player_num} (${seat.player_name})`).join(", ")
+          : "None";
+
+        if (!data.open_seats.length) {
+          playerNumSelect.innerHTML = '<option value="">No seats available</option>';
+          statusMessage.textContent = "This game is already full.";
+          gameInfo.style.display = "block";
+          return;
+        }
+
+        playerNumSelect.innerHTML = '<option value="">Select a #</option>' +
+          data.open_seats.map(seat => `<option value="${seat}">Player ${seat}</option>`).join("");
+
+        gameInfo.style.display = "block";
+        joinForm.style.display = "block";
+        statusMessage.textContent = "Choose one of the remaining player numbers.";
+      } catch (error) {
+        console.error("Error loading game:", error);
+        statusMessage.textContent = "Failed to load game.";
+      }
+    }
+
+    function validateJoinForm() {
+      const playerNum = document.getElementById("player_num").value;
+      const deck = document.getElementById("deck_name").value.trim();
+      const commander = document.getElementById("commander").value.trim();
+      const result = document.getElementById("result").value;
+
+      if (!playerNum) {
+        alert("Please choose an available player number.");
+        return false;
+      }
+
+      if (!deck && !commander) {
+        alert("Please enter either a Deck Name or a Commander.");
+        return false;
+      }
+
+      if (!result) {
+        alert("Please choose a result.");
+        return false;
+      }
+
+      return true;
+    }
+
+    document.getElementById("lookup-form").addEventListener("submit", function(event) {
+      event.preventDefault();
+      const matchId = document.getElementById("lookup_match_id").value;
+      if (!matchId) {
+        return;
+      }
+      loadGame(matchId);
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const prefilledMatchId = params.get("match_id");
+    if (prefilledMatchId) {
+      document.getElementById("lookup_match_id").value = prefilledMatchId;
+      loadGame(prefilledMatchId);
+    }
+  </script>
+</body>
+</html>

@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS matches (
   created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
+ALTER TABLE matches
+ADD COLUMN IF NOT EXISTS player_count INTEGER;
+
+ALTER TABLE matches
+DROP CONSTRAINT IF EXISTS matches_player_count_check;
+
+ALTER TABLE matches
+ADD CONSTRAINT matches_player_count_check CHECK (player_count IS NULL OR player_count > 1);
+
 CREATE TABLE IF NOT EXISTS match_players (
   id SERIAL PRIMARY KEY,
   match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
@@ -56,6 +65,19 @@ CREATE TABLE IF NOT EXISTS match_players (
   result TEXT NOT NULL CHECK (result IN ('win', 'loss', 'draw')),
   UNIQUE (match_id, player_id)
 );
+
+ALTER TABLE match_players
+ADD COLUMN IF NOT EXISTS player_num INTEGER;
+
+ALTER TABLE match_players
+DROP CONSTRAINT IF EXISTS match_players_player_num_check;
+
+ALTER TABLE match_players
+ADD CONSTRAINT match_players_player_num_check CHECK (player_num IS NULL OR player_num > 0);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_match_player_num
+ON match_players(match_id, player_num)
+WHERE player_num IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_players_user_id ON players(user_id);
 CREATE INDEX IF NOT EXISTS idx_decks_player_id ON decks(player_id);
