@@ -247,6 +247,27 @@ app.get("/init-schema", requireDatabase, async (req, res) => {
 
     await pool.query(`
       ALTER TABLE matches
+      ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER;
+    `);
+
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE constraint_name = 'matches_created_by_user_id_fkey'
+            AND table_name = 'matches'
+        ) THEN
+          ALTER TABLE matches
+          ADD CONSTRAINT matches_created_by_user_id_fkey
+          FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `);
+
+    await pool.query(`
+      ALTER TABLE matches
       ADD COLUMN IF NOT EXISTS player_count INTEGER;
     `);
 
