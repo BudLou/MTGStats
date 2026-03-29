@@ -841,13 +841,40 @@ app.get("/api/my-games", requireDatabase, requireLogin, async (req, res) => {
 
 app.get("/api/players", requireDatabase, async (req, res) => {
   try {
-    const result = await pool.query(
-      `
-      SELECT id, name, user_id, deckbuilding_link, discord_contact, created_at
-      FROM players
-      ORDER BY name ASC
-      `
-    );
+    const result = await pool.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.user_id,
+        p.deckbuilding_link,
+        p.discord_contact,
+        p.created_at,
+        COUNT(mp.id) AS total_games,
+        COUNT(*) FILTER (WHERE mp.result = 'win') AS wins,
+        COUNT(*) FILTER (WHERE mp.result = 'loss') AS losses,
+        COUNT(*) FILTER (WHERE mp.result = 'draw') AS draws,
+        CASE
+          WHEN COUNT(mp.id) = 0 THEN 0
+          ELSE ROUND((COUNT(*) FILTER (WHERE mp.result = 'win')::numeric / COUNT(mp.id)::numeric) * 100, 2)
+        END AS win_rate,
+        CASE
+          WHEN COUNT(mp.id) = 0 THEN 0
+          ELSE ROUND((COUNT(*) FILTER (WHERE mp.result = 'loss')::numeric / COUNT(mp.id)::numeric) * 100, 2)
+        END AS loss_rate
+      FROM players p
+      LEFT JOIN match_players mp ON mp.player_id = p.id
+      GROUP BY
+        p.id,
+        p.name,
+        p.user_id,
+        p.deckbuilding_link,
+        p.discord_contact,
+        p.created_at
+      ORDER BY
+        wins DESC,
+        total_games DESC,
+        p.name ASC
+    `);
 
     res.json({
       success: true,

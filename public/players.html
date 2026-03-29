@@ -3,12 +3,94 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MTG Stats</title>
+  <title>Players - MTG Stats</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main>
-    <p>It works</p>
+    <h1>Player Leaderboard</h1>
+    <p>Players ranked by most wins.</p>
+
+    <div id="players-list">
+      <p>Loading players...</p>
+    </div>
+
+    <p>
+      <a href="/index.html">Home</a> |
+      <a href="/profile.html">Profile</a> |
+      <a href="/add_game.html">Create Game</a> |
+      <a href="/join_game.html">Join Game</a>
+    </p>
   </main>
+
+  <script>
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function renderPlayers(players) {
+      const container = document.getElementById("players-list");
+
+      if (!players || players.length === 0) {
+        container.innerHTML = "<p>No players found.</p>";
+        return;
+      }
+
+      container.innerHTML = `
+        <section class="player-list">
+          ${players.map((player, index) => {
+            const safeName = escapeHtml(player.name || "Unknown");
+            const totalGames = Number(player.total_games || 0);
+            const wins = Number(player.wins || 0);
+            const losses = Number(player.losses || 0);
+            const winRate = Number(player.win_rate || 0).toFixed(2);
+            const lossRate = Number(player.loss_rate || 0).toFixed(2);
+
+            const playerNameHtml = player.deckbuilding_link
+              ? `<a href="${escapeHtml(player.deckbuilding_link)}" target="_blank" rel="noopener noreferrer">${safeName}</a>`
+              : safeName;
+
+            return `
+              <article class="player-card">
+                <h2>#${index + 1} ${playerNameHtml}</h2>
+                <p><strong>Total Games:</strong> ${totalGames}</p>
+                <p><strong>Wins:</strong> ${wins}</p>
+                <p><strong>Losses:</strong> ${losses}</p>
+                <p><strong>Win Rate:</strong> ${winRate}%</p>
+                <p><strong>Loss Rate:</strong> ${lossRate}%</p>
+              </article>
+            `;
+          }).join("")}
+        </section>
+      `;
+    }
+
+    async function loadPlayers() {
+      const container = document.getElementById("players-list");
+      container.innerHTML = "<p>Loading players...</p>";
+
+      try {
+        const res = await fetch("/api/players");
+        const data = await res.json();
+
+        if (!data.success) {
+          container.innerHTML = "<p>Failed to load players.</p>";
+          return;
+        }
+
+        renderPlayers(data.players);
+      } catch (error) {
+        console.error("Error loading players:", error);
+        container.innerHTML = "<p>Failed to load players.</p>";
+      }
+    }
+
+    loadPlayers();
+  </script>
 </body>
 </html>
