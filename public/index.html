@@ -35,11 +35,11 @@ async function handleProfileClick(event) {
       window.location.href = "/profile.html";
     } else {
       // not logged in
-      window.location.href = "/sign.html";
+      window.location.href = "/sign.html?next=/profile.html";
     }
   } catch (error) {
     console.error("Error checking login:", error);
-    window.location.href = "/sign.html";
+    window.location.href = "/sign.html?next=/profile.html";
   }
 }
 
