@@ -958,7 +958,7 @@ app.post("/logout", (req, res) => {
       return res.status(500).send(error.message || "Logout failed.");
     }
 
-    res.redirect("/sign.html");
+    res.redirect("/");
   });
 });
 
