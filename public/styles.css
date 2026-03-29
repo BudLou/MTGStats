@@ -85,3 +85,9 @@ h1 {
 .leaderboard a:hover {
   text-decoration: underline;
 }
+
+.nav-bar {
+  position: fixed;
+  top: 10px;
+  right: 20px;
+}
