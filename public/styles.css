@@ -55,3 +55,30 @@ h1 {
   top: 10px;
   right: 20px;
 }
+
+.player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.player-card {
+  border: 1px solid #374151;
+  border-radius: 10px;
+  padding: 16px;
+  background: #1f2937;
+}
+
+.player-card h2 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.player-card a {
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+.player-card a:hover {
+  text-decoration: underline;
+}
