@@ -361,9 +361,7 @@ app.get("/health/schema", requireDatabase, async (req, res) => {
       FROM information_schema.tables
       WHERE table_schema = 'public'
         AND table_name IN ('users', 'players', 'decks', 'matches', 'match_players')
-      ORDER BY
-        win_percentage DESC,
-        games DESC
+      ORDER BY table_name
     `);
 
     res.json({
@@ -906,7 +904,7 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         p.discord_contact,
         p.created_at
       ORDER BY
-        wins DESC,
+        win_rate DESC,
         total_games DESC,
         p.name ASC
     `);
