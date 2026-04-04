@@ -13,7 +13,7 @@
 
     <form action="/add-game" method="POST" onsubmit="return validateCreateGameForm()">
       <p>
-        <label for="player_count">Number of Players:</label>
+        <label for="player_count">Total Players:</label>
         <input type="number" name="player_count" id="player_count" min="2" max="8" required>
       </p>
 
@@ -25,14 +25,21 @@
           <option value="2">Player 2</option>
           <option value="3">Player 3</option>
           <option value="4">Player 4</option>
+          <option value="5">Player 5</option>
+          <option value="6">Player 6</option>
+          <option value="7">Player 7</option>
+          <option value="8">Player 8</option>
         </select>
       </p>
 
       <p>
-        <label for="deck_name">Deck Name:</label>
-        <input type="text" name="deck_name" id="deck_name">
-        <label for="commander">Or Commander:</label>
-        <input type="text" name="commander" id="commander">
+        <label for="deck_name">Deck Name or Commander:</label>
+        <input type="text" name="deck_name" id="deck_name" required>
+      </p>
+
+      <p>
+        <label for="deck_link">Deck Link (Optional):</label>
+        <input type="url" name="deck_link" id="deck_link" placeholder="https://moxfield.com/...">
       </p>
 
       <p>
@@ -91,8 +98,8 @@
     function validateCreateGameForm() {
       const playerCount = Number(document.getElementById("player_count").value);
       const playerNum = Number(document.getElementById("player_num").value);
-      const deck = document.getElementById("deck_name").value.trim();
-      const commander = document.getElementById("commander").value.trim();
+      const deckName = document.getElementById("deck_name").value.trim();
+      const deckLink = document.getElementById("deck_link").value.trim();
       const result = document.getElementById("result").value;
 
       if (!Number.isInteger(playerCount) || playerCount < 2) {
@@ -105,9 +112,18 @@
         return false;
       }
 
-      if (!deck && !commander) {
-        alert("Please enter either a Deck Name or a Commander.");
+      if (!deckName) {
+        alert("Please enter a Deck Name or Commander.");
         return false;
+      }
+
+      if (deckLink) {
+        try {
+          new URL(deckLink);
+        } catch (error) {
+          alert("Please enter a valid deck link.");
+          return false;
+        }
       }
 
       if (!result) {

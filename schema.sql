@@ -37,8 +37,12 @@ CREATE TABLE IF NOT EXISTS decks (
   deck_name TEXT NOT NULL,
   format TEXT NOT NULL DEFAULT 'Commander',
   commander TEXT,
+  deck_link TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE decks
+ADD COLUMN IF NOT EXISTS deck_link TEXT;
 
 CREATE TABLE IF NOT EXISTS matches (
   id SERIAL PRIMARY KEY,

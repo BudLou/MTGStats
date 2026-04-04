@@ -98,64 +98,54 @@ function parsePositiveInteger(value) {
   return Number.isInteger(num) && num > 0 ? num : null;
 }
 
-async function findOrCreateDeck({ playerId, deckName, format, commander }) {
+async function findOrCreateDeck({ playerId, deckName, format, commander, deckLink }) {
   const cleanDeckName = deckName && deckName.trim() ? deckName.trim() : null;
   const cleanCommander = commander && commander.trim() ? commander.trim() : null;
   const cleanFormat = format && format.trim() ? format.trim() : "Commander";
+  const cleanDeckLink = deckLink && deckLink.trim() ? deckLink.trim() : null;
 
   if (!cleanDeckName && !cleanCommander) {
     return null;
   }
 
-  if (cleanDeckName) {
-    const existingDeck = await pool.query(
-      `
-      SELECT id
-      FROM decks
-      WHERE player_id = $1
-        AND deck_name = $2
-      `,
-      [playerId, cleanDeckName]
-    );
+  const lookupName = cleanDeckName || cleanCommander;
 
-    if (existingDeck.rows.length > 0) {
-      return existingDeck.rows[0].id;
-    }
-
-    const newDeck = await pool.query(
-      `
-      INSERT INTO decks (player_id, deck_name, format, commander)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id
-      `,
-      [playerId, cleanDeckName, cleanFormat, cleanCommander]
-    );
-
-    return newDeck.rows[0].id;
-  }
-
-  const generatedDeckName = `${cleanCommander} Deck`;
-  const existingCommanderDeck = await pool.query(
+  const existingDeck = await pool.query(
     `
-    SELECT id
+    SELECT id, deck_link
     FROM decks
     WHERE player_id = $1
-      AND commander = $2
+      AND deck_name = $2
     `,
-    [playerId, cleanCommander]
+    [playerId, lookupName]
   );
 
-  if (existingCommanderDeck.rows.length > 0) {
-    return existingCommanderDeck.rows[0].id;
+  if (existingDeck.rows.length > 0) {
+    const existing = existingDeck.rows[0];
+
+    if (cleanDeckLink && existing.deck_link !== cleanDeckLink) {
+      await pool.query(
+        `
+        UPDATE decks
+        SET deck_link = $1,
+            format = $2,
+            commander = COALESCE($3, commander)
+        WHERE id = $4
+        `,
+        [cleanDeckLink, cleanFormat, cleanCommander, existing.id]
+      );
+    }
+
+    return existing.id;
   }
 
   const newDeck = await pool.query(
     `
-    INSERT INTO decks (player_id, deck_name, format, commander)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO decks (player_id, deck_name, format, commander, deck_link)
+    VALUES ($1, $2, $3, $4, $5)
     RETURNING id
     `,
-    [playerId, generatedDeckName, cleanFormat, cleanCommander]
+    [playerId, lookupName, cleanFormat, cleanCommander, cleanDeckLink]
   );
 
   return newDeck.rows[0].id;
@@ -555,10 +545,10 @@ app.get("/join_game.html", requireDatabase, requireLogin, requirePlayerProfile, 
 
 app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
   try {
-    const { location, notes, result, deck_name, format, commander, player_count, player_num } = req.body;
+    const { location, notes, result, deck_name, deck_link, format, commander, player_count, player_num } = req.body;
 
     if (!deck_name?.trim() && !commander?.trim()) {
-      return res.status(400).send("Please enter either a Deck Name or a Commander.");
+      return res.status(400).send("Please enter a Deck Name or Commander.");
     }
 
     if (!result || !["win", "loss", "draw"].includes(result)) {
@@ -580,7 +570,8 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
       playerId: req.player.id,
       deckName: deck_name,
       format,
-      commander
+      commander,
+      deckLink: deck_link
     });
 
     const matchInsert = await pool.query(
@@ -616,10 +607,10 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
 
 app.post("/join-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
   try {
-    const { match_id, player_num, result, deck_name, format, commander } = req.body;
+    const { match_id, player_num, result, deck_name, deck_link, format, commander } = req.body;
 
     if (!deck_name?.trim() && !commander?.trim()) {
-      return res.status(400).send("Please enter either a Deck Name or a Commander.");
+      return res.status(400).send("Please enter a Deck Name or Commander.");
     }
 
     if (!result || !["win", "loss", "draw"].includes(result)) {
@@ -697,7 +688,8 @@ app.post("/join-game", requireDatabase, requireLogin, requirePlayerProfile, asyn
       playerId: req.player.id,
       deckName: deck_name,
       format,
-      commander
+      commander,
+      deckLink: deck_link
     });
 
     await pool.query(
