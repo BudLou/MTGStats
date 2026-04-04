@@ -113,7 +113,7 @@ function parsePositiveInteger(value) {
   return Number.isInteger(num) && num > 0 ? num : null;
 }
 
-async function findOrCreateDeck({ playerId, deckName, format, commander, deckLink }) {
+async function findOrCreateDeck({ playerId, deckName, commander, deckLink }) {
   const cleanDeckName = deckName && deckName.trim() ? deckName.trim() : null;
   const cleanCommander = commander && commander.trim() ? commander.trim() : null;
   const cleanFormat = format && format.trim() ? format.trim() : "Commander";
@@ -589,15 +589,14 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
     const deckId = await findOrCreateDeck({
       playerId: req.player.id,
       deckName: deck_name,
-      format,
       commander,
       deckLink: deck_link
     });
 
     const matchInsert = await pool.query(
       `
-      INSERT INTO matches (location, notes, created_by_user_id, player_count)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO matches (location, notes, created_by_user_id, player_count, format)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING id
       `,
       [
@@ -707,7 +706,6 @@ app.post("/join-game", requireDatabase, requireLogin, requirePlayerProfile, asyn
     const deckId = await findOrCreateDeck({
       playerId: req.player.id,
       deckName: deck_name,
-      format,
       commander,
       deckLink: deck_link
     });
