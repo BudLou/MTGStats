@@ -25,6 +25,21 @@ const pool = DATABASE_URL
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 
+async function runStartupMigrations() {
+  if (!pool) return;
+
+  try {
+    await pool.query(`
+      ALTER TABLE decks
+      ADD COLUMN IF NOT EXISTS deck_link TEXT;
+    `);
+
+    console.log("Startup migrations complete.");
+  } catch (error) {
+    console.error("Startup migration failed:", error);
+  }
+}
+
 app.use(express.static(PUBLIC_DIR));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -111,33 +126,32 @@ async function findOrCreateDeck({ playerId, deckName, format, commander, deckLin
   const lookupName = cleanDeckName || cleanCommander;
 
   const existingDeck = await pool.query(
-    `
-    SELECT id, deck_link
-    FROM decks
-    WHERE player_id = $1
-      AND deck_name = $2
-    `,
-    [playerId, lookupName]
-  );
+  `
+  SELECT id
+  FROM decks
+  WHERE player_id = $1
+    AND deck_name = $2
+  `,
+  [playerId, lookupName]
+);
+if (existingDeck.rows.length > 0) {
+  const existing = existingDeck.rows[0];
 
-  if (existingDeck.rows.length > 0) {
-    const existing = existingDeck.rows[0];
-
-    if (cleanDeckLink && existing.deck_link !== cleanDeckLink) {
-      await pool.query(
-        `
-        UPDATE decks
-        SET deck_link = $1,
-            format = $2,
-            commander = COALESCE($3, commander)
-        WHERE id = $4
-        `,
-        [cleanDeckLink, cleanFormat, cleanCommander, existing.id]
-      );
-    }
-
-    return existing.id;
+  if (cleanDeckLink) {
+    await pool.query(
+      `
+      UPDATE decks
+      SET deck_link = $1,
+          format = $2,
+          commander = COALESCE($3, commander)
+      WHERE id = $4
+      `,
+      [cleanDeckLink, cleanFormat, cleanCommander, existing.id]
+    );
   }
+
+  return existing.id;
+}
 
   const newDeck = await pool.query(
     `
@@ -216,13 +230,19 @@ app.get("/init-schema", requireDatabase, async (req, res) => {
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS decks (
-        id SERIAL PRIMARY KEY,
-        player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
-        deck_name TEXT NOT NULL,
-        format TEXT NOT NULL DEFAULT 'Commander',
-        commander TEXT,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      id SERIAL PRIMARY KEY,
+      player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      deck_name TEXT NOT NULL,
+      format TEXT NOT NULL DEFAULT 'Commander',
+      commander TEXT,
+      deck_link TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
+    `);
+
+    await pool.query(`
+      ALTER TABLE decks
+      ADD COLUMN IF NOT EXISTS deck_link TEXT;
     `);
 
     await pool.query(`
@@ -958,6 +978,12 @@ app.use((req, res) => {
   res.status(404).send("Page not found.");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+async function startServer() {
+  await runStartupMigrations();
+
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+startServer();
