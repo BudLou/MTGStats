@@ -905,9 +905,11 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         p.created_at
       ORDER BY
         CASE
-          WHEN (wins + losses) = 0 THEN 0
-          ELSE (wins::float / (wins + losses))
-        END DESC
+          WHEN COUNT(mp.id) = 0 THEN 0
+          ELSE (COUNT(*) FILTER (WHERE mp.result = 'win')::numeric / COUNT(mp.id)::numeric)
+        END DESC,
+        COUNT(mp.id) DESC,
+        p.name ASC
     `);
 
     res.json({
