@@ -361,11 +361,9 @@ app.get("/health/schema", requireDatabase, async (req, res) => {
       FROM information_schema.tables
       WHERE table_schema = 'public'
         AND table_name IN ('users', 'players', 'decks', 'matches', 'match_players')
-      ORDER BY 
-        CASE 
-          WHEN (wins + losses) = 0 THEN 0
-          ELSE (wins::float / (wins + losses))
-        END DESC
+      ORDER BY
+        win_percentage DESC,
+        games DESC
     `);
 
     res.json({
