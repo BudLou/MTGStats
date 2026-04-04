@@ -904,9 +904,10 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         p.discord_contact,
         p.created_at
       ORDER BY
-        win_rate DESC,
-        total_games DESC,
-        p.name ASC
+        CASE
+          WHEN (wins + losses) = 0 THEN 0
+          ELSE (wins::float / (wins + losses))
+        END DESC
     `);
 
     res.json({
