@@ -34,6 +34,11 @@ async function runStartupMigrations() {
       ADD COLUMN IF NOT EXISTS deck_link TEXT;
     `);
 
+    await pool.query(`
+      ALTER TABLE matches
+      ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'Commander';
+    `);
+
     console.log("Startup migrations complete.");
   } catch (error) {
     console.error("Startup migration failed:", error);
@@ -116,7 +121,6 @@ function parsePositiveInteger(value) {
 async function findOrCreateDeck({ playerId, deckName, commander, deckLink }) {
   const cleanDeckName = deckName && deckName.trim() ? deckName.trim() : null;
   const cleanCommander = commander && commander.trim() ? commander.trim() : null;
-  const cleanFormat = format && format.trim() ? format.trim() : "Commander";
   const cleanDeckLink = deckLink && deckLink.trim() ? deckLink.trim() : null;
 
   if (!cleanDeckName && !cleanCommander) {
@@ -126,40 +130,40 @@ async function findOrCreateDeck({ playerId, deckName, commander, deckLink }) {
   const lookupName = cleanDeckName || cleanCommander;
 
   const existingDeck = await pool.query(
-  `
-  SELECT id
-  FROM decks
-  WHERE player_id = $1
-    AND deck_name = $2
-  `,
-  [playerId, lookupName]
-);
-if (existingDeck.rows.length > 0) {
-  const existing = existingDeck.rows[0];
+    `
+    SELECT id
+    FROM decks
+    WHERE player_id = $1
+      AND deck_name = $2
+    `,
+    [playerId, lookupName]
+  );
 
-  if (cleanDeckLink) {
-    await pool.query(
-      `
-      UPDATE decks
-      SET deck_link = $1,
-          format = $2,
-          commander = COALESCE($3, commander)
-      WHERE id = $4
-      `,
-      [cleanDeckLink, cleanFormat, cleanCommander, existing.id]
-    );
+  if (existingDeck.rows.length > 0) {
+    const existing = existingDeck.rows[0];
+
+    if (cleanDeckLink || cleanCommander) {
+      await pool.query(
+        `
+        UPDATE decks
+        SET deck_link = COALESCE($1, deck_link),
+            commander = COALESCE($2, commander)
+        WHERE id = $3
+        `,
+        [cleanDeckLink, cleanCommander, existing.id]
+      );
+    }
+
+    return existing.id;
   }
-
-  return existing.id;
-}
 
   const newDeck = await pool.query(
     `
-    INSERT INTO decks (player_id, deck_name, format, commander, deck_link)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO decks (player_id, deck_name, commander, deck_link)
+    VALUES ($1, $2, $3, $4)
     RETURNING id
     `,
-    [playerId, lookupName, cleanFormat, cleanCommander, cleanDeckLink]
+    [playerId, lookupName, cleanCommander, cleanDeckLink]
   );
 
   return newDeck.rows[0].id;
@@ -230,13 +234,12 @@ app.get("/init-schema", requireDatabase, async (req, res) => {
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS decks (
-      id SERIAL PRIMARY KEY,
-      player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
-      deck_name TEXT NOT NULL,
-      format TEXT NOT NULL DEFAULT 'Commander',
-      commander TEXT,
-      deck_link TEXT,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        id SERIAL PRIMARY KEY,
+        player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+        deck_name TEXT NOT NULL,
+        commander TEXT,
+        deck_link TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
 
@@ -246,18 +249,29 @@ app.get("/init-schema", requireDatabase, async (req, res) => {
     `);
 
     await pool.query(`
+      ALTER TABLE decks
+      DROP COLUMN IF EXISTS format;
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS matches (
         id SERIAL PRIMARY KEY,
         match_date TIMESTAMP NOT NULL DEFAULT NOW(),
         location TEXT,
         notes TEXT,
-        created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+        created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        format TEXT NOT NULL DEFAULT 'Commander'
       );
     `);
 
     await pool.query(`
       ALTER TABLE matches
       ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER;
+    `);
+
+    await pool.query(`
+      ALTER TABLE matches
+      ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'Commander';
     `);
 
     await pool.query(`
@@ -603,7 +617,8 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
         location && location.trim() ? location.trim() : null,
         notes && notes.trim() ? notes.trim() : null,
         req.session.user.id,
-        cleanPlayerCount
+        cleanPlayerCount,
+        format && format.trim() ? format.trim() : "Commander"
       ]
     );
 
@@ -626,7 +641,7 @@ app.post("/add-game", requireDatabase, requireLogin, requirePlayerProfile, async
 
 app.post("/join-game", requireDatabase, requireLogin, requirePlayerProfile, async (req, res) => {
   try {
-    const { match_id, player_num, result, deck_name, deck_link, format, commander } = req.body;
+    const { match_id, player_num, result, deck_name, deck_link, commander } = req.body;
 
     if (!deck_name?.trim() && !commander?.trim()) {
       return res.status(400).send("Please enter a Deck Name or Commander.");
@@ -740,7 +755,7 @@ app.get("/api/matches/:id/open-seats", requireDatabase, requireLogin, async (req
 
     const matchResult = await pool.query(
       `
-      SELECT id, match_date, location, notes, player_count, created_by_user_id
+      SELECT id, match_date, location, notes, player_count, created_by_user_id, format
       FROM matches
       WHERE id = $1
       `,
@@ -781,7 +796,8 @@ app.get("/api/matches/:id/open-seats", requireDatabase, requireLogin, async (req
         location: match.location,
         notes: match.notes,
         player_count: match.player_count,
-        created_by_user_id: match.created_by_user_id
+        created_by_user_id: match.created_by_user_id,
+        format: match.format
       },
       taken_seats: takenSeats,
       open_seats: openSeats,
@@ -843,6 +859,7 @@ app.get("/api/my-games", requireDatabase, requireLogin, async (req, res) => {
         m.location,
         m.notes,
         m.player_count,
+        m.format,
         COUNT(mp.id) AS joined_count,
         STRING_AGG(DISTINCT p.name, ', ' ORDER BY p.name) AS players,
         STRING_AGG(DISTINCT d.deck_name, ', ' ORDER BY d.deck_name) AS deck_names
@@ -851,7 +868,7 @@ app.get("/api/my-games", requireDatabase, requireLogin, async (req, res) => {
       LEFT JOIN players p ON p.id = mp.player_id
       LEFT JOIN decks d ON d.id = mp.deck_id
       WHERE ${conditions.join(" AND ")}
-      GROUP BY m.id, m.match_date, m.location, m.notes, m.player_count
+      GROUP BY m.id, m.match_date, m.location, m.notes, m.player_count, m.format
       ORDER BY m.match_date DESC, m.id DESC
     `;
 
