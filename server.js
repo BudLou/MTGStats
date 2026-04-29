@@ -911,9 +911,9 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         END AS loss_rate,
         ROUND(
           (
-            (COUNT(*) FILTER (WHERE mp.result = 'win'))::numeric + 1.0
+            (COUNT(*) FILTER (WHERE mp.result = 'win'))::numeric + 3.0
           ) / (
-            COUNT(mp.id)::numeric + 2.0
+            COUNT(mp.id)::numeric + 6.0
           ) * 100,
           2
         ) AS adjusted_win_rate
