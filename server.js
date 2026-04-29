@@ -908,7 +908,7 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         CASE
           WHEN COUNT(mp.id) = 0 THEN 0
           ELSE ROUND((COUNT(*) FILTER (WHERE mp.result = 'loss')::numeric / COUNT(mp.id)::numeric) * 100, 2)
-        END AS loss_rate
+        END AS loss_rate,
         ROUND(
           (
             (COUNT(*) FILTER (WHERE mp.result = 'win'))::numeric + 3.0
