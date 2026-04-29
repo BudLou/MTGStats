@@ -923,8 +923,7 @@ app.get("/api/players", requireDatabase, async (req, res) => {
           WHEN COUNT(mp.id) = 0 THEN 0
           ELSE (COUNT(*) FILTER (WHERE mp.result = 'win')::numeric / COUNT(mp.id)::numeric)
         END DESC,
-        total_games DESC,
-        COUNT(mp.id) DESC,
+        COUNT(mp.id) ASC,
         p.name ASC
     `);
 
