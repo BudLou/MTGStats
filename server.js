@@ -940,7 +940,7 @@ app.get("/api/players", requireDatabase, async (req, res) => {
           WHEN COUNT(mp.id) >= 5 THEN 0
           ELSE 1
         END ASC,
-        adjusted_win_rate DESC,
+        win_rate DESC,
         total_games DESC,
         p.name ASC
     `);
