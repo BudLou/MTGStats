@@ -928,7 +928,7 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         p.created_at
       ORDER BY
         adjusted_win_rate DESC,
-        COUNT(mp.id) DESC,
+        total_games DESC,
         p.name ASC
     `);
 
