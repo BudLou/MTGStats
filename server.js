@@ -903,20 +903,29 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         COUNT(*) FILTER (WHERE mp.result = 'draw') AS draws,
         CASE
           WHEN COUNT(mp.id) = 0 THEN 0
-          ELSE ROUND((COUNT(*) FILTER (WHERE mp.result = 'win')::numeric / COUNT(mp.id)::numeric) * 100, 2)
+          ELSE ROUND(
+            (COUNT(*) FILTER (WHERE mp.result = 'win')::numeric / COUNT(mp.id)::numeric) * 100,
+            2
+          )
         END AS win_rate,
         CASE
           WHEN COUNT(mp.id) = 0 THEN 0
-          ELSE ROUND((COUNT(*) FILTER (WHERE mp.result = 'loss')::numeric / COUNT(mp.id)::numeric) * 100, 2)
+          ELSE ROUND(
+            (COUNT(*) FILTER (WHERE mp.result = 'loss')::numeric / COUNT(mp.id)::numeric) * 100,
+            2
+          )
         END AS loss_rate,
-        ROUND(
-          (
-            (COUNT(*) FILTER (WHERE mp.result = 'win'))::numeric + 3.0
-          ) / (
-            COUNT(mp.id)::numeric + 6.0
-          ) * 100,
-          2
-        ) AS adjusted_win_rate
+        CASE
+          WHEN COUNT(mp.id) = 0 THEN 0
+          ELSE ROUND(
+            (
+              (COUNT(*) FILTER (WHERE mp.result = 'win'))::numeric + 3.0
+            ) / (
+              COUNT(mp.id)::numeric + 6.0
+            ) * 100,
+            2
+          )
+        END AS adjusted_win_rate
       FROM players p
       LEFT JOIN match_players mp ON mp.player_id = p.id
       GROUP BY
@@ -927,7 +936,10 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         p.discord_contact,
         p.created_at
       ORDER BY
-        total_games DESC,
+        CASE
+          WHEN COUNT(mp.id) >= 5 THEN 0
+          ELSE 1
+        END ASC,
         adjusted_win_rate DESC,
         total_games DESC,
         p.name ASC
