@@ -927,8 +927,8 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         p.discord_contact,
         p.created_at
       ORDER BY
-        adjusted_win_rate DESC,
         total_games DESC,
+        adjusted_win_rate DESC,
         p.name ASC
     `);
 
