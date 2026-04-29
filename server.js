@@ -919,11 +919,11 @@ app.get("/api/players", requireDatabase, async (req, res) => {
         p.discord_contact,
         p.created_at
       ORDER BY
+        total_games DESC,
         CASE
           WHEN COUNT(mp.id) = 0 THEN 0
           ELSE (COUNT(*) FILTER (WHERE mp.result = 'win')::numeric / COUNT(mp.id)::numeric)
         END DESC,
-        total_games DESC,
         p.name ASC
     `);
 
